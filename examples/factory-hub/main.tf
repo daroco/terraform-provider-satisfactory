@@ -37,15 +37,15 @@ provider "satisfactory" {
 }
 
 locals {
-  # Centered on the player's location (debug HUD: V(X=-223975.55,
-  # Y=-31243.68, Z=5793.27), creative-mode save) rather than world origin,
+  # Centered on the player's location (debug HUD: V(X=-71162.79,
+  # Y=246097.38, Z=-667.11), creative-mode save) rather than world origin,
   # so the hub actually lands where whoever applies this is standing.
   # base_z uses the player's own Z as the foundation top, same as the
   # earlier single-foundation smoke test that landed "literally right on
   # top of me." Update these three values (and re-apply) any time this
   # example moves to a different save/session - the mod's tf_id registry
   # is persisted per save game, so it starts empty on a new one.
-  base_z   = 5793.27
+  base_z   = -667.11
   # A foundation's pivot is at its center, so anything placed on top needs
   # base_z + half the tile's thickness (calibrated live on the 4m-thick
   # Build_Foundation_8x4_01_C: machines flush at +200 - see
@@ -57,8 +57,8 @@ locals {
   # their pivot is 1m below their base (calibrated separately: +300 on the
   # 4m tile where machines were +200).
   attachment_z = local.build_z + 100
-  center_x = -223975.55
-  center_y = -31243.68
+  center_x = -71162.79
+  center_y = 246097.38
 }
 
 # 64m x 64m floor (8x8 tiles of an 8m x 1m-thick foundation) centered on the player -
