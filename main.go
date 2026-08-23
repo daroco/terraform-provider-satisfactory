@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/daroco/satisfacto-form/internal/provider"
+	"github.com/daroco/terraform-provider-satisfactory/internal/provider"
 )
 
 // version is set by goreleaser at build time.

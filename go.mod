@@ -1,4 +1,4 @@
-module github.com/daroco/satisfacto-form
+module github.com/daroco/terraform-provider-satisfactory
 
 go 1.25.8
 

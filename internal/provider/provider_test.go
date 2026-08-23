@@ -15,10 +15,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/daroco/satisfacto-form/internal/api"
-	"github.com/daroco/satisfacto-form/internal/client"
-	"github.com/daroco/satisfacto-form/internal/mockserver"
-	"github.com/daroco/satisfacto-form/internal/provider"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/client"
+	"github.com/daroco/terraform-provider-satisfactory/internal/mockserver"
+	"github.com/daroco/terraform-provider-satisfactory/internal/provider"
 )
 
 // captureID stores the resource's current id in *dst for later steps.

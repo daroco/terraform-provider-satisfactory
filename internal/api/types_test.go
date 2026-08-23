@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/daroco/satisfacto-form/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
 )
 
 // TestBuildable_UnmarshalMissingClockSpeed pins down the exact fidelity gap

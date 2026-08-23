@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/daroco/satisfacto-form/internal/api"
-	"github.com/daroco/satisfacto-form/internal/client"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/client"
 )
 
 // TestIsNotFound_RealNotFound is the load-bearing drift-detection check

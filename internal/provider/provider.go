@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/daroco/satisfacto-form/internal/client"
+	"github.com/daroco/terraform-provider-satisfactory/internal/client"
 )
 
 // New returns the provider factory for the given version string.

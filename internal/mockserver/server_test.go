@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/daroco/satisfacto-form/internal/api"
-	"github.com/daroco/satisfacto-form/internal/client"
-	"github.com/daroco/satisfacto-form/internal/mockserver"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/client"
+	"github.com/daroco/terraform-provider-satisfactory/internal/mockserver"
 )
 
 func newTestClient(t *testing.T) *client.Client {

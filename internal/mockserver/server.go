@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/daroco/satisfacto-form/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
 )
 
 // Server holds the in-memory world state behind the mock API.

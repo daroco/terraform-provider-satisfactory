@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daroco/satisfacto-form/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
 )
 
 // NotFoundError is returned when the world has no object with the given tf_id

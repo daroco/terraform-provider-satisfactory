@@ -1,4 +1,4 @@
-# satisfacto-form
+# terraform-provider-satisfactory
 
 Factory-as-code for [Satisfactory](https://www.satisfactorygame.com/): a
 Terraform provider plus a companion
@@ -47,10 +47,9 @@ flowchart TD
 | `internal/provider` | Terraform provider (4 resources) |
 | `internal/client`, `internal/api` | API client + shared wire types |
 | `internal/mockserver`, `cmd/mockserver` | In-memory mock of the mod API |
-| `mod/` | UE plugin source (SML mod) — compiled by CI/locally, not here |
+| `examples/factory-hub` | Hub-and-spoke layout (merger/splitter star topology) |
 | `examples/iron-plate-line` | Minimal working example config |
 | `examples/factory-floor` | Range/grid placement example (`modules/grid-2d`) |
-| `docs/mod-ci.md` | Self-hosted runner setup for the mod build |
 
 ## Resources
 
@@ -121,11 +120,11 @@ Tests: `go test ./...`; full acceptance run: `TF_ACC=1 go test ./internal/provid
 ## CI
 
 - **provider-ci** (hosted runners): build, vet, unit + acceptance tests against
-  the mock, and an apply/plan/destroy of the example.
-- **mod-build** (self-hosted Windows runner): compiles and packages the UE mod
-  for client + dedicated servers. Setup and required secrets
-  (`ENGINE_GH_TOKEN`, `WWISE_EMAIL`, `WWISE_PASSWORD`): see
-  [docs/mod-ci.md](docs/mod-ci.md).
+  the mock, and an apply/plan/destroy of every example.
+
+The companion in-game mod (UE C++/SML) lives at
+[daroco/SatisfactoryTerraform](https://github.com/daroco/SatisfactoryTerraform),
+including its own build CI and self-hosted-runner setup docs.
 
 ## Where this can go: the GitOps factory
 
@@ -146,14 +145,12 @@ some genuinely unhinged things fall out almost for free once M2/M3 land
 
 ## Status
 
-- ✅ M0 — provider + mock + tests + example + provider CI (this works today)
-- ✅ M1 — mod skeleton (`mod/`) compiles and packages via `mod-build` CI:
-  HTTP server, registry, machine spawn/delete; client + Windows dedicated
-  server (Linux server descoped for now — needs a cross-compile toolchain)
-- ✅ M2 — recipe/clock patch, robust class resolution, proper dismantle,
-  lightweight-instance tracking for structural buildables — verified live
-  via `terraform apply` against a running game
-- ✅ M3 — belts + power lines: `terraform apply` on `examples/iron-plate-line`
-  creates all 8 resources (foundations, buildings, belt, power line) with
-  zero drift on the next `plan` — verified live
-- ⏳ M4+ — import/drift polish, dedicated-server docs, registry release
+All 4 resources are functionally complete and verified live end-to-end
+against a running game session: full applies, in-place recipe/clock updates,
+drift detection, and zero-drift plans that survive save/reload. Provider CI
+gates every change against the in-memory mock.
+
+Next up: Terraform Registry release (GoReleaser + docs generation + signing),
+`terraform import` polish, and GitOps mode.
+
+License: [MPL-2.0](LICENSE).

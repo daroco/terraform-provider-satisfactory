@@ -22,8 +22,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/daroco/satisfacto-form/internal/api"
-	"github.com/daroco/satisfacto-form/internal/client"
+	"github.com/daroco/terraform-provider-satisfactory/internal/api"
+	"github.com/daroco/terraform-provider-satisfactory/internal/client"
 )
 
 // requiresReplaceDescription is the exact string every RequiresReplace()

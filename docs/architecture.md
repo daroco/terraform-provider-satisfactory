@@ -21,7 +21,7 @@ stay in lockstep — change the spec first, then all of:
 1. `internal/api` (wire types)
 2. `internal/client` (provider's HTTP client)
 3. `internal/mockserver` (in-memory reference implementation + validation)
-4. `mod/Source/...` (the real implementation, C++)
+4. `Source/...` in the [SatisfactoryTerraform mod repo](https://github.com/daroco/SatisfactoryTerraform) (the real implementation, C++)
 
 Error semantics: `404` unknown `tf_id`, `409` duplicate `tf_id`, `422`
 validation failure (unknown class, bad connector, clock out of range).

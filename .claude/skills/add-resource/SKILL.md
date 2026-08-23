@@ -32,7 +32,7 @@ in this order:
 6. **Acceptance tests** in `internal/provider/provider_test.go`: lifecycle +
    no-op re-plan (`PlanOnly`) + one validation-error case. Run
    `TF_ACC=1 go test ./internal/provider/ -v`.
-7. **`mod/Source/...`** — implement the real thing in C++ (or leave a
+7. **`Source/...` in the SatisfactoryTerraform mod repo** — implement the real thing in C++ (or leave a
    `TODO(Mn)` marker with a concrete implementation sketch if the milestone
    isn't there yet). Remember: this cannot be compiled in the cloud dev
    environment, so keep C++ changes minimal and pattern-matched to existing

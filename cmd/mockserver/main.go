@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/daroco/satisfacto-form/internal/mockserver"
+	"github.com/daroco/terraform-provider-satisfactory/internal/mockserver"
 )
 
 func main() {
