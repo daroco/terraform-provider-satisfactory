@@ -82,10 +82,10 @@ func TestBuildableValidation(t *testing.T) {
 	ctx := context.Background()
 
 	cases := []api.Buildable{
-		{TFID: "", Class: "Build_SmelterMk1_C"},                                  // missing tf_id
-		{TFID: "x", Class: "Smelter"},                                            // bad class name
-		{TFID: "x", Class: "Build_SmelterMk1_C", Recipe: "IronIngot"},            // bad recipe name
-		{TFID: "x", Class: "Build_SmelterMk1_C", ClockSpeed: 9.0},                // clock out of range
+		{TFID: "", Class: "Build_SmelterMk1_C"},                       // missing tf_id
+		{TFID: "x", Class: "Smelter"},                                 // bad class name
+		{TFID: "x", Class: "Build_SmelterMk1_C", Recipe: "IronIngot"}, // bad recipe name
+		{TFID: "x", Class: "Build_SmelterMk1_C", ClockSpeed: 9.0},     // clock out of range
 	}
 	for _, b := range cases {
 		if _, err := c.CreateBuildable(ctx, b); err == nil {
@@ -167,8 +167,8 @@ func TestConnectionErrorContract(t *testing.T) {
 
 	// 422: missing tf_id, bad class, negative connector index.
 	badCases := []api.Connection{
-		{TFID: "", Class: "Build_ConveyorBeltMk1_C", From: base.From, To: base.To},                                          // missing tf_id
-		{TFID: "c-2", Class: "ConveyorBelt", From: base.From, To: base.To},                                                  // bad class name
+		{TFID: "", Class: "Build_ConveyorBeltMk1_C", From: base.From, To: base.To},                                                      // missing tf_id
+		{TFID: "c-2", Class: "ConveyorBelt", From: base.From, To: base.To},                                                              // bad class name
 		{TFID: "c-2", Class: "Build_ConveyorBeltMk1_C", From: api.ConnectionEndpoint{BuildableTFID: "m-1", Connector: -1}, To: base.To}, // negative connector
 	}
 	for _, bad := range badCases {

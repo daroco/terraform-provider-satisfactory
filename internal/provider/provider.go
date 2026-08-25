@@ -45,8 +45,8 @@ func (p *satisfactoryProvider) Schema(_ context.Context, _ provider.SchemaReques
 				Description: "Base URL of the mod API. Defaults to SATISFACTORY_ENDPOINT or http://localhost:8090.",
 			},
 			"token": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
+				Optional:  true,
+				Sensitive: true,
 				Description: "Bearer token, required only when the mod is configured with one " +
 					"(set SATISFACTORY_TOKEN in the game's environment for non-loopback " +
 					"deployments). Defaults to the SATISFACTORY_TOKEN env var.",
