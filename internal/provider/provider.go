@@ -38,7 +38,7 @@ func (p *satisfactoryProvider) Metadata(_ context.Context, _ provider.MetadataRe
 
 func (p *satisfactoryProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manage Satisfactory factories through the SatisfactoTerraform mod's HTTP API.",
+		Description: "Manage Satisfactory factories through the SatisfactoryTerraform mod's HTTP API.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
 				Optional:    true,
@@ -47,7 +47,9 @@ func (p *satisfactoryProvider) Schema(_ context.Context, _ provider.SchemaReques
 			"token": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Bearer token if the mod API has one configured. Defaults to SATISFACTORY_TOKEN.",
+				Description: "Bearer token, required only when the mod is configured with one " +
+					"(set SATISFACTORY_TOKEN in the game's environment for non-loopback " +
+					"deployments). Defaults to the SATISFACTORY_TOKEN env var.",
 			},
 		},
 	}
