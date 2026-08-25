@@ -15,7 +15,7 @@ persisted in the save game, so plans stay clean across save/load, and in-game
 dismantling shows up as drift (404 on Read → state removal → recreate plan).
 `internal/mockserver` is an in-memory implementation of the same contract so
 everything provider-side is developed and CI-gated without launching the game.
-See `docs/architecture.md`.
+See `docs/design/architecture.md`.
 
 ## Commands
 
@@ -44,7 +44,9 @@ Full dev loop for applying the example against the mock: see the
 - `examples/factory-hub` — hub-and-spoke layout (merger/splitter star topology)
 - `modules/grid-2d` — reusable local module: bounding box + spacing → a
   `for_each`-ready map of positions. Pure HCL, no provider/mod changes.
-- `docs/` — architecture, GitOps-factory design notes
+- `docs/` — generated Terraform Registry docs (`index.md`, `resources/`);
+  hand-written design notes live in `docs/design/` (architecture, lifecycle,
+  GitOps-factory)
 
 The in-game half (UE C++ mod, its CI, and its self-hosted runner docs) lives
 in [daroco/SatisfactoryTerraform](https://github.com/daroco/SatisfactoryTerraform).
@@ -81,4 +83,4 @@ in [daroco/SatisfactoryTerraform](https://github.com/daroco/SatisfactoryTerrafor
 v0.1.0-level functionality is complete and verified live end-to-end against a
 running game session: all 4 resources, zero-drift plans across save/reload.
 Next: registry release (GoReleaser + tfplugindocs + GPG signing), import
-polish, GitOps mode (see docs/gitops-factory.md).
+polish, GitOps mode (see docs/design/gitops-factory.md).

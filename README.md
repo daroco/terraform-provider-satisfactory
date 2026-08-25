@@ -41,7 +41,7 @@ flowchart TD
 
 For the whole thing end to end — the request lifecycle, drift detection, the
 security gate, and every game-lifecycle subtlety the two halves had to be
-built around — see **[docs/lifecycle.md](docs/lifecycle.md)**.
+built around — see **[docs/design/lifecycle.md](docs/design/lifecycle.md)**.
 
 ## Repo layout
 
@@ -134,7 +134,7 @@ including its own build CI and self-hosted-runner setup docs.
 
 Because state lives in Terraform and mutations go through a reviewable plan,
 some genuinely unhinged things fall out almost for free once M2/M3 land
-(design notes in [docs/gitops-factory.md](docs/gitops-factory.md)):
+(design notes in [docs/design/gitops-factory.md](docs/design/gitops-factory.md)):
 
 - **The repo is the world** — a dedicated server runs the mod; CI applies
   `main` on merge. The factory is the branch.
