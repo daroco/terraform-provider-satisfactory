@@ -1,5 +1,10 @@
 # terraform-provider-satisfactory
 
+[![provider-ci](https://github.com/daroco/terraform-provider-satisfactory/actions/workflows/provider-ci.yml/badge.svg)](https://github.com/daroco/terraform-provider-satisfactory/actions/workflows/provider-ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/daroco/terraform-provider-satisfactory)](https://goreportcard.com/report/github.com/daroco/terraform-provider-satisfactory)
+[![Terraform Registry](https://img.shields.io/badge/registry-daroco%2Fsatisfactory-844FBA?logo=terraform)](https://registry.terraform.io/providers/daroco/satisfactory/latest)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-brightgreen.svg)](LICENSE)
+
 Factory-as-code for [Satisfactory](https://www.satisfactorygame.com/): a
 Terraform provider plus a companion
 [SML](https://ficsit.app/) mod, so `terraform apply` places foundations,
@@ -67,6 +72,36 @@ built around — see **[docs/design/lifecycle.md](docs/design/lifecycle.md)**.
 the live game at apply time, not baked into the provider — new game content
 works without a provider release. Class names are enumerated in the game's own
 `CommunityResources/Docs/` JSON and on the wikis.
+
+## Using the provider
+
+You need two things: this provider, and a running game (or dedicated server)
+with the companion [SatisfactoryTerraform](https://github.com/daroco/SatisfactoryTerraform)
+mod loaded and its localhost API reachable.
+
+Once the provider is published to the Terraform Registry, declare it and run
+`terraform init`:
+
+```hcl
+terraform {
+  required_providers {
+    satisfactory = {
+      source  = "daroco/satisfactory"
+      version = "~> 0.1"
+    }
+  }
+}
+
+provider "satisfactory" {
+  # endpoint defaults to http://localhost:8090 (or SATISFACTORY_ENDPOINT).
+  # A token is only needed for non-loopback deployments; set SATISFACTORY_TOKEN.
+}
+```
+
+Before the first registry release, build the provider from source and point
+Terraform at it with `dev_overrides` — see [Developing without the game](#developing-without-the-game),
+which also lets you try everything against the in-memory mock with no game
+installed.
 
 ## Placing a range of buildings
 
