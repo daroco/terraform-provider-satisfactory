@@ -79,7 +79,7 @@ func (c *Client) PatchBuildable(ctx context.Context, tfID string, p api.Buildabl
 // not an error so destroy stays idempotent.
 func (c *Client) DeleteBuildable(ctx context.Context, tfID string) error {
 	err := c.do(ctx, http.MethodDelete, "/buildables/"+tfID, nil, nil)
-	if _, gone := asNotFound(err); gone {
+	if asNotFound(err) {
 		return nil
 	}
 	return err
@@ -102,7 +102,7 @@ func (c *Client) GetConnection(ctx context.Context, tfID string) (api.Connection
 // DeleteConnection dismantles a connection, tolerating already-gone objects.
 func (c *Client) DeleteConnection(ctx context.Context, tfID string) error {
 	err := c.do(ctx, http.MethodDelete, "/connections/"+tfID, nil, nil)
-	if _, gone := asNotFound(err); gone {
+	if asNotFound(err) {
 		return nil
 	}
 	return err
@@ -110,16 +110,12 @@ func (c *Client) DeleteConnection(ctx context.Context, tfID string) error {
 
 // IsNotFound reports whether err means the object no longer exists in-world.
 func IsNotFound(err error) bool {
-	_, ok := asNotFound(err)
-	return ok
+	return asNotFound(err)
 }
 
-func asNotFound(err error) (*NotFoundError, bool) {
+func asNotFound(err error) bool {
 	var nf *NotFoundError
-	if errors.As(err, &nf) {
-		return nf, true
-	}
-	return nil, false
+	return errors.As(err, &nf)
 }
 
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {

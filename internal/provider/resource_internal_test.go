@@ -104,9 +104,8 @@ func TestBuildingSchema_ClockSpeedHasNoStaticDefault(t *testing.T) {
 	}
 }
 
-// TestBuildingSchema_ReplaceVsInPlace pins down the CLAUDE.md convention:
-// "Only recipe and clock_speed update in place; everything else
-// RequiresReplace."
+// TestBuildingSchema_ReplaceVsInPlace pins down the CLAUDE.md convention that
+// only recipe and clock_speed update in place; everything else RequiresReplace.
 func TestBuildingSchema_ReplaceVsInPlace(t *testing.T) {
 	r := &buildingResource{}
 	var resp resource.SchemaResponse
@@ -177,7 +176,10 @@ func TestFoundationSchema_EverythingReplaces(t *testing.T) {
 // is also a deliberate no-op).
 func TestConnectionSchema_EverythingReplaces(t *testing.T) {
 	for _, factory := range []func() resource.Resource{newBeltResource, newPowerLineResource} {
-		r := factory().(*connectionResource)
+		r, ok := factory().(*connectionResource)
+		if !ok {
+			t.Fatalf("factory did not return a *connectionResource")
+		}
 		var resp resource.SchemaResponse
 		r.Schema(context.Background(), resource.SchemaRequest{}, &resp)
 

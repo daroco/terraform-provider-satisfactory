@@ -29,11 +29,25 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean; run 'make fmt':"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Build
         run: go build ./...
 
       - name: Vet
         run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: latest
 
       - name: Unit tests
         run: go test ./internal/mockserver/ ./internal/client/... ./internal/api/...
@@ -65,6 +79,11 @@ jobs:
           EOF
           export TF_CLI_CONFIG_FILE=/tmp/dev.tfrc
           for dir in examples/*/; do
+            # Only the self-contained, runnable examples have a main.tf. The
+            # tfplugindocs example fragments (examples/provider,
+            # examples/resources/*) are single-resource snippets for docs and
+            # are not applyable on their own - skip them here.
+            [ -f "$dir/main.tf" ] || continue
             echo "--- $dir ---"
             # `terraform get` installs local `module` blocks (e.g.
             # factory-floor's grid-2d) without touching providers/backend -
