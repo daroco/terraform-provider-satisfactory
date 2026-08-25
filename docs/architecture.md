@@ -1,12 +1,15 @@
 # Architecture
 
+> For the full request lifecycle, drift detection, and security gate as
+> diagrams, see [lifecycle.md](lifecycle.md). This page is the prose companion.
+
 ```mermaid
 flowchart LR
     TF["terraform<br/>(state)"] -->|HCL| Provider["terraform-provider-satisfactory (Go)"]
     Provider -->|"HTTP/JSON :8090"| API
     Provider -.->|dev/CI| Mock["mockserver (Go)<br/>same API contract"]
 
-    subgraph Mod["SatisfactoTerraform mod (UE C++/SML, in-game)"]
+    subgraph Mod["SatisfactoryTerraform mod (UE C++/SML, in-game)"]
         API["API subsystem<br/>(HTTP listener)"]
         Registry["Registry subsystem<br/>tf_id → actor,<br/>SaveGame-persisted"]
         API --> Registry

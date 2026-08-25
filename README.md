@@ -27,7 +27,7 @@ resource "satisfactory_belt" "ingots" {
 
 ```mermaid
 flowchart TD
-    A["terraform apply"] -->|"localhost REST, api/openapi.yaml"| B["SatisfactoTerraform mod (UE C++/SML)<br/>spawns/dismantles buildables, tags each with its tf_id"]
+    A["terraform apply"] -->|"localhost REST, api/openapi.yaml"| B["SatisfactoryTerraform mod (UE C++/SML)<br/>spawns/dismantles buildables, tags each with its tf_id"]
     B --> C["save game<br/>(tf_id registry persists across save/load)"]
 ```
 
@@ -38,6 +38,10 @@ flowchart TD
   and offers to rebuild it. Drift detection, but for factories.
 - `internal/mockserver` is an in-memory implementation of the same API so the
   provider is fully developed, tested, and CI-gated without launching the game.
+
+For the whole thing end to end — the request lifecycle, drift detection, the
+security gate, and every game-lifecycle subtlety the two halves had to be
+built around — see **[docs/lifecycle.md](docs/lifecycle.md)**.
 
 ## Repo layout
 
