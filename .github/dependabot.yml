@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # Bump the terraform-plugin-* modules together; they move in lockstep.
+      terraform-plugin:
+        patterns:
+          - "github.com/hashicorp/terraform-plugin-*"
+  - package-ecosystem: "gomod"
+    directory: "/tools"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
