@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/daroco/terraform-provider-satisfactory/security/advisories/new
+    about: Please report security issues privately, not as public issues (see SECURITY.md).
+  - name: In-game mod (SatisfactoryTerraform)
+    url: https://github.com/daroco/SatisfactoryTerraform/issues
+    about: Bugs in the UE C++/SML mod that spawns buildables belong in the mod repo.

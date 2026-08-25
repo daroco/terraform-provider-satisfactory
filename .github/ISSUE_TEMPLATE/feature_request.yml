@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a new resource, attribute, or behavior.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The use case, not just the mechanism.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        What would the configuration look like? If this needs a new endpoint on
+        the mod API, note that too — the contract in api/openapi.yaml usually
+        changes first.
+      render: hcl
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

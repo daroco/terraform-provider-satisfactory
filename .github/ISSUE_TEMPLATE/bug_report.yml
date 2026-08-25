@@ -1,0 +1,59 @@
+name: Bug report
+description: Something the provider does is wrong or fails.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For bugs in the in-game mod itself (spawning,
+        dismantling, save persistence), please use the
+        [SatisfactoryTerraform](https://github.com/daroco/SatisfactoryTerraform/issues)
+        repository instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did the provider do instead?
+      placeholder: terraform apply reported ... but I expected ...
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Terraform configuration
+      description: A minimal config that reproduces the problem.
+      render: hcl
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Plan / apply output
+      description: Relevant output. Re-run with `TF_LOG=DEBUG` if useful. Redact any token.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: provider-version
+    attributes:
+      label: Provider version
+      placeholder: v0.1.0 (or a commit SHA for a dev build)
+    validations:
+      required: true
+  - type: input
+    id: terraform-version
+    attributes:
+      label: Terraform version
+      placeholder: terraform version
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Running against
+      options:
+        - A live game session with the mod loaded
+        - The in-memory mockserver
+        - Not sure
+    validations:
+      required: true
