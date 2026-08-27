@@ -89,5 +89,7 @@ func (p *satisfactoryProvider) Resources(_ context.Context) []func() resource.Re
 }
 
 func (p *satisfactoryProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		newBuildableClassDataSource,
+	}
 }

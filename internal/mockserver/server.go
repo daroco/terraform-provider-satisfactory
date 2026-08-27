@@ -46,6 +46,8 @@ func (s *Server) Handler() http.Handler {
 		})
 	}))
 
+	mux.HandleFunc("GET /api/v1/classes/{class}", s.auth(s.getBuildableClass))
+
 	mux.HandleFunc("GET /api/v1/buildables", s.auth(s.listBuildables))
 	mux.HandleFunc("POST /api/v1/buildables", s.auth(s.createBuildable))
 	mux.HandleFunc("GET /api/v1/buildables/{tf_id}", s.auth(s.getBuildable))
@@ -337,4 +339,44 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, api.Error{Message: msg})
+}
+
+// mockClearance is a stand-in for what the real mod reads off a class default
+// object. The mock has no game content, so a few well-known classes carry
+// hand-measured footprints and everything else reports none - which is also
+// the honest answer for most buildables, since declaring clearance is the
+// exception rather than the rule.
+//
+// This is the same narrow, deliberate exception to "no game content tables in
+// provider code" that the manufacturer-class list is: it exists so CI can
+// exercise the endpoint's shape, not so the provider can reason about content.
+// Values are half-extents in centimetres about the buildable's origin.
+var mockClearance = map[string]api.Bounds{
+	"Build_Foundation_8x1_01_C": boundsFromHalfExtents(400, 400, 50),
+	"Build_Foundation_8x4_01_C": boundsFromHalfExtents(400, 400, 200),
+	"Build_ConstructorMk1_C":    boundsFromHalfExtents(395, 795, 200),
+	"Build_SmelterMk1_C":        boundsFromHalfExtents(295, 495, 200),
+}
+
+func boundsFromHalfExtents(x, y, z float64) api.Bounds {
+	return api.Bounds{
+		Min:  api.Vec3{X: -x, Y: -y, Z: -z},
+		Max:  api.Vec3{X: x, Y: y, Z: z},
+		Size: api.Vec3{X: 2 * x, Y: 2 * y, Z: 2 * z},
+	}
+}
+
+func (s *Server) getBuildableClass(w http.ResponseWriter, r *http.Request) {
+	class := r.PathValue("class")
+	if !validClass(class, "Build_") {
+		writeErr(w, http.StatusNotFound, "no buildable class named "+class)
+		return
+	}
+	out := api.BuildableClass{Class: class, Clearance: []api.ClearanceBox{}}
+	if b, ok := mockClearance[class]; ok {
+		bounds := b
+		out.Bounds = &bounds
+		out.Clearance = []api.ClearanceBox{{Type: "default", Min: b.Min, Max: b.Max}}
+	}
+	writeJSON(w, http.StatusOK, out)
 }

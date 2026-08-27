@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -55,6 +56,15 @@ func (c *Client) Health(ctx context.Context) error {
 }
 
 // CreateBuildable spawns a machine or foundation.
+// GetBuildableClass reads static, spawn-free facts about a buildable class
+// (its clearance footprint). Nothing is placed and no save is touched, so this
+// is safe to call during plan.
+func (c *Client) GetBuildableClass(ctx context.Context, class string) (api.BuildableClass, error) {
+	var out api.BuildableClass
+	err := c.do(ctx, http.MethodGet, "/classes/"+url.PathEscape(class), nil, &out)
+	return out, err
+}
+
 func (c *Client) CreateBuildable(ctx context.Context, b api.Buildable) (api.Buildable, error) {
 	var out api.Buildable
 	err := c.do(ctx, http.MethodPost, "/buildables", b, &out)

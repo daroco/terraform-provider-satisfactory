@@ -427,3 +427,46 @@ func TestFoundationPositionConflict(t *testing.T) {
 		t.Errorf("a manufacturer at the same spot should be accepted: %v", err)
 	}
 }
+
+// TestGetBuildableClass covers the spawn-free class lookup that lets callers
+// size a layout instead of guessing spacing (mod issue #6).
+func TestGetBuildableClass(t *testing.T) {
+	c := newTestClient(t)
+	ctx := context.Background()
+
+	got, err := c.GetBuildableClass(ctx, "Build_Foundation_8x1_01_C")
+	if err != nil {
+		t.Fatalf("known class: %v", err)
+	}
+	if got.Bounds == nil {
+		t.Fatal("a foundation should report a footprint")
+	}
+	if got.Bounds.Size.X != 800 || got.Bounds.Size.Y != 800 {
+		t.Errorf("8m foundation size = %vx%v, want 800x800", got.Bounds.Size.X, got.Bounds.Size.Y)
+	}
+	if got.Bounds.Size.X != got.Bounds.Max.X-got.Bounds.Min.X {
+		t.Error("size must equal max-min; callers rely on not having to redo the arithmetic")
+	}
+	if len(got.Clearance) == 0 {
+		t.Error("expected at least one clearance box alongside the union")
+	}
+
+	// A class the game knows but that reserves no space: bounds must be
+	// absent, not a zero box. A zero box would read as "needs no room" and
+	// silently stack buildables on one another.
+	none, err := c.GetBuildableClass(ctx, "Build_SomethingWithNoClearance_C")
+	if err != nil {
+		t.Fatalf("clearance-free class: %v", err)
+	}
+	if none.Bounds != nil {
+		t.Error("a class with no clearance must omit bounds rather than report zeros")
+	}
+	if none.Clearance == nil {
+		t.Error("clearance should be an empty array, not null, so callers can range over it")
+	}
+
+	// Not a buildable class name at all.
+	if _, err := c.GetBuildableClass(ctx, "Recipe_IronPlate_C"); !client.IsNotFound(err) {
+		t.Errorf("non-buildable class should 404, got %v", err)
+	}
+}
