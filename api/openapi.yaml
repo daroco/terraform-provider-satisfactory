@@ -158,7 +158,14 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
-      description: An object with that tf_id already exists.
+      description: >
+        The request conflicts with existing world state. Either an object with
+        that tf_id already exists, or - for POST /buildables of a
+        lightweight-eligible class such as a foundation - a buildable of the
+        same class already occupies that position. Co-located instances of one
+        class cannot be told apart after a save/reload (identity there is class
+        plus location), so they are refused rather than created; the world is
+        left unchanged.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

@@ -6,6 +6,7 @@ package mockserver
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -122,6 +123,22 @@ func (s *Server) createBuildable(w http.ResponseWriter, r *http.Request) {
 	if _, exists := s.buildables[b.TFID]; exists {
 		writeErr(w, http.StatusConflict, "buildable with tf_id "+b.TFID+" already exists")
 		return
+	}
+	// Mirrors the real mod: a lightweight-eligible buildable (foundations and
+	// other passive structures) may not be placed where one of the same class
+	// already sits. Co-located instances are indistinguishable after a
+	// save/reload, since identity there is class + location, so the mod
+	// refuses rather than creating a pair that would strand each other. Only
+	// non-manufacturers are eligible, which is why this is keyed off the same
+	// predicate the recipe/clock rules use.
+	if !isManufacturerClass(b.Class) {
+		for _, existing := range s.buildables {
+			if existing.Class == b.Class && sameSpot(existing.Transform, b.Transform) {
+				writeErr(w, http.StatusConflict,
+					"a buildable of that class already exists at that position")
+				return
+			}
+		}
 	}
 	s.buildables[b.TFID] = b
 	writeJSON(w, http.StatusCreated, b)
@@ -264,6 +281,13 @@ func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 // validClass approximates the game's class naming: prefix + name + "_C".
+// sameSpot reports whether two transforms are the same position within the
+// tolerance the mod uses (1cm), which absorbs float32 save round-trip noise.
+func sameSpot(a, b api.Transform) bool {
+	const tolCm = 1.0
+	return math.Abs(a.X-b.X) < tolCm && math.Abs(a.Y-b.Y) < tolCm && math.Abs(a.Z-b.Z) < tolCm
+}
+
 func validClass(class, prefix string) bool {
 	return strings.HasPrefix(class, prefix) && strings.HasSuffix(class, "_C") && len(class) > len(prefix)+2
 }

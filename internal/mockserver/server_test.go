@@ -382,3 +382,48 @@ func TestAuth(t *testing.T) {
 		t.Errorf("Health() with client token: %v", err)
 	}
 }
+
+// TestFoundationPositionConflict pins the mod's co-location rule (mod issue
+// #5): a lightweight-eligible buildable may not be placed where one of the
+// same class already sits, because two instances at one position cannot be
+// told apart after a save/reload - identity there is class + location - and
+// they end up stranding each other. Manufacturers are not lightweight-eligible
+// and are unaffected.
+func TestFoundationPositionConflict(t *testing.T) {
+	c := newTestClient(t)
+	ctx := context.Background()
+
+	at := api.Transform{X: 800, Y: 1600, Z: 20000}
+	first := api.Buildable{TFID: "f-1", Class: "Build_Foundation_8x1_01_C", Transform: at}
+	if _, err := c.CreateBuildable(ctx, first); err != nil {
+		t.Fatalf("first foundation: %v", err)
+	}
+
+	dup := api.Buildable{TFID: "f-2", Class: "Build_Foundation_8x1_01_C", Transform: at}
+	if _, err := c.CreateBuildable(ctx, dup); err == nil {
+		t.Error("a second foundation at the same position should conflict")
+	}
+
+	// Within tolerance (<1cm) still counts as the same spot.
+	near := dup
+	near.TFID = "f-3"
+	near.Transform.X += 0.5
+	if _, err := c.CreateBuildable(ctx, near); err == nil {
+		t.Error("a foundation within 1cm should conflict too")
+	}
+
+	// A clearly different position is fine.
+	far := dup
+	far.TFID = "f-4"
+	far.Transform.X += 800
+	if _, err := c.CreateBuildable(ctx, far); err != nil {
+		t.Errorf("a foundation 8m away should be accepted: %v", err)
+	}
+
+	// A different class at the same spot is allowed - the rule is per class,
+	// and machines are not lightweight-eligible at all.
+	other := api.Buildable{TFID: "f-5", Class: "Build_SmelterMk1_C", Transform: at}
+	if _, err := c.CreateBuildable(ctx, other); err != nil {
+		t.Errorf("a manufacturer at the same spot should be accepted: %v", err)
+	}
+}
