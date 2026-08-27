@@ -133,9 +133,28 @@ box changes later. See `modules/grid-2d/README.md` and
 `examples/factory-floor` for the full pattern, including why it's
 `for_each`-shaped rather than `count`-shaped.
 
-Spacing is always something you choose — the module has no notion of a
-building's actual in-game footprint (that would need the mod to expose a
-class's real collision/clearance size over the API, which isn't built yet).
+`spacing` is yours to choose, but you no longer have to guess it. The
+`satisfactory_buildable_class` data source reports a class's real footprint,
+read from the game without placing anything:
+
+```hcl
+data "satisfactory_buildable_class" "tile" {
+  class = "Build_Foundation_8x1_01_C"
+}
+
+module "floor" {
+  source  = "./modules/grid-2d"
+  from    = { x = 0, y = 0 }
+  to      = { x = 3200, y = 1600 }
+  spacing = data.satisfactory_buildable_class.tile.size.x # 800, from the game
+}
+```
+
+`size` is null for a class that declares no clearance — most buildables reserve
+no space, and a config that depends on a size will fail loudly rather than
+silently stack things. The provider does not enforce clearance: placing through
+the API deliberately bypasses the game's placement rules, so overlapping is
+allowed and this data is advisory.
 
 ## Developing without the game
 
