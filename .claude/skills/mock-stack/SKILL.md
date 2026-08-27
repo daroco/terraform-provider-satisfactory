@@ -7,6 +7,26 @@ description: Run the full local dev loop - mockserver + locally built provider +
 
 Everything runs against `internal/mockserver`; no game needed.
 
+## What this loop cannot tell you
+
+It exercises the provider, not the mod. A clean run here means the provider is
+self-consistent - it does **not** mean the change works in a game. The mock is
+a Go map; the real implementation lives inside Unreal, and the gap has hidden
+every serious bug in this project:
+
+- The game converts foundations to lightweight instances **synchronously**
+  during spawn, and recycles instance slots on removal. The mock has no such
+  concept, so it cannot reproduce leaked instances, stale references, or
+  identity collisions - and a leaked instance is invisible to the API anyway.
+- Transforms round-trip through float32 in the game and not in the mock, so
+  quantization drift never appears here.
+- Wherever the mock is more lenient than the mod, this loop goes **green on
+  configs that fail live**. Keeping the two aligned is a hard requirement, not
+  a nicety - see the `add-resource` skill.
+
+Use this loop for fast iteration and CI parity. For anything the mod
+implements, follow it with a live pass (`live-verify` skill, mod repo).
+
 ```sh
 # 1. Build both binaries (provider binary name matters for dev_overrides)
 go build -o /tmp/satisfacto/terraform-provider-satisfactory .
