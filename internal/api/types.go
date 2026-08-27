@@ -52,3 +52,40 @@ type World struct {
 	GameVersion string `json:"game_version"`
 	ModVersion  string `json:"mod_version"`
 }
+
+// Vec3 is a point or extent in Unreal centimetres.
+type Vec3 struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
+}
+
+// ClearanceBox is one clearance volume declared by a buildable class,
+// already transformed by its relative transform and expressed relative to
+// the buildable's origin.
+type ClearanceBox struct {
+	// Type is "default", "soft", or "block_everything". Vanilla placement
+	// refuses default-vs-default overlaps, warns on soft, and refuses
+	// everything for block_everything. The mod does not enforce any of it -
+	// placing through the API deliberately bypasses hologram rules - so this
+	// is advisory data for callers that want to reason about space.
+	Type string `json:"type"`
+	Min  Vec3   `json:"min"`
+	Max  Vec3   `json:"max"`
+}
+
+// Bounds is the union of a class's clearance boxes: its whole footprint.
+type Bounds struct {
+	Min  Vec3 `json:"min"`
+	Max  Vec3 `json:"max"`
+	Size Vec3 `json:"size"`
+}
+
+// BuildableClass is the response of GET /classes/{class}: static facts read
+// from the class default object, so asking costs nothing and places nothing.
+type BuildableClass struct {
+	Class     string         `json:"class"`
+	Clearance []ClearanceBox `json:"clearance"`
+	// Bounds is nil when the class declares no clearance, which is common.
+	Bounds *Bounds `json:"bounds,omitempty"`
+}

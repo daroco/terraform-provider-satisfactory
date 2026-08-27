@@ -26,7 +26,10 @@ testacc:
 # Regenerate the Terraform Registry docs in docs/ from the provider schema and
 # examples/. Needs the terraform CLI on PATH. `docs` is an alias for `generate`.
 generate:
-	cd tools && go generate ./...
+	# -tags tools is required: tools.go carries a `//go:build tools` constraint,
+	# so without it `go generate ./...` matches no packages and silently does
+	# nothing - docs would drift from the schema with make reporting success.
+	cd tools && go generate -tags tools ./...
 
 docs: generate
 

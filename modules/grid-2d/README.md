@@ -41,8 +41,11 @@ resource is left alone.
 - 2D only (one `z` level per module call). Stacking multiple floors is the
   same pattern with one more nested loop over a `z` range - not built here,
   since it wasn't needed yet.
-- `spacing` is a plain number you choose; the module has no idea how big a
-  building actually is in-game. Real footprint-aware auto-packing (given a
-  building class, figure out how many fit without asking) would need the mod
-  to expose a buildable class's actual clearance/collision size over the API
-  - tracked as a possible follow-up, not built.
+- `spacing` is a plain number the module takes on faith - it still has no
+  idea how big a building is. But you can now feed it a real measurement
+  instead of a guess: `data.satisfactory_buildable_class.<name>.size.x`
+  reports a class's clearance footprint, read from the game without placing
+  anything. See the provider README for the pattern.
+- Footprint-aware auto-packing (given a class, work out how many fit) is now
+  possible to build on that data, but is deliberately not done here - it would
+  turn a pure-HCL module into something that needs a live game to plan.

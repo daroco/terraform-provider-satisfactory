@@ -40,6 +40,28 @@ paths:
                   session_name: { type: string }
                   game_version: { type: string }
                   mod_version: { type: string }
+  /classes/{class}:
+    get:
+      summary: Static, spawn-free facts about a buildable class
+      description: >
+        Reads the class default object, so nothing is placed in the world and
+        no save is touched. Useful for deciding how much room a buildable needs
+        before laying out a factory - the provider's grid module otherwise has
+        no notion of footprint and callers must guess spacing.
+      parameters:
+        - name: class
+          in: path
+          required: true
+          schema: { type: string }
+          description: Buildable class name, e.g. Build_Foundation_8x1_01_C.
+      responses:
+        "200":
+          description: Class metadata.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BuildableClass" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /buildables:
     get:
       summary: List all Terraform-managed buildables
@@ -175,6 +197,53 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    BuildableClass:
+      type: object
+      required: [class, clearance]
+      properties:
+        class:
+          type: string
+        clearance:
+          type: array
+          description: >
+            The class's clearance boxes, already transformed by their relative
+            transforms, in centimetres relative to the buildable's origin. Empty
+            for classes that declare no clearance (common - many buildables do
+            not reserve space).
+          items: { $ref: "#/components/schemas/ClearanceBox" }
+        bounds:
+          allOf: [{ $ref: "#/components/schemas/Bounds" }]
+          description: >
+            Union of every clearance box, i.e. the whole footprint. Omitted when
+            clearance is empty. This is the field to use for spacing decisions.
+    ClearanceBox:
+      type: object
+      required: [type, min, max]
+      properties:
+        type:
+          type: string
+          enum: [default, soft, block_everything]
+          description: >
+            default blocks other default boxes; soft may overlap but warns in
+            vanilla placement; block_everything refuses even soft overlaps.
+        min: { $ref: "#/components/schemas/Vec3" }
+        max: { $ref: "#/components/schemas/Vec3" }
+    Bounds:
+      type: object
+      required: [min, max, size]
+      properties:
+        min: { $ref: "#/components/schemas/Vec3" }
+        max: { $ref: "#/components/schemas/Vec3" }
+        size:
+          allOf: [{ $ref: "#/components/schemas/Vec3" }]
+          description: max - min, provided so callers do not repeat the arithmetic.
+    Vec3:
+      type: object
+      required: [x, y, z]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
     Error:
       type: object
       required: [message]
