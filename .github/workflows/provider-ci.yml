@@ -4,12 +4,12 @@ on:
   push:
     branches: ["**"]
     paths-ignore:
-      - "mod/**"
       - "**.md"
+  # No paths-ignore here on purpose. `test` is a required status check, and a
+  # required check that is skipped never reports - it stays pending forever and
+  # the PR cannot merge. A docs-only PR running the Go tests costs about a
+  # minute; a permanently stuck PR costs far more.
   pull_request:
-    paths-ignore:
-      - "mod/**"
-      - "**.md"
 
 permissions:
   contents: read
