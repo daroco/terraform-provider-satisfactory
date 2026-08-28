@@ -99,6 +99,10 @@ func (s *Server) createBuildable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, "recipe must be a recipe class name like Recipe_IronPlate_C")
 		return
 	}
+	if b.Recipe != "" && !recipeFitsClass(b.Recipe, b.Class) {
+		writeErr(w, http.StatusUnprocessableEntity, b.Recipe+" cannot be produced in "+b.Class)
+		return
+	}
 	if isManufacturerClass(b.Class) {
 		if b.ClockSpeed == 0 {
 			b.ClockSpeed = 1.0
@@ -179,6 +183,10 @@ func (s *Server) patchBuildable(w http.ResponseWriter, r *http.Request) {
 	if p.Recipe != nil {
 		if *p.Recipe != "" && !validClass(*p.Recipe, "Recipe_") {
 			writeErr(w, http.StatusUnprocessableEntity, "recipe must be a recipe class name like Recipe_IronPlate_C")
+			return
+		}
+		if *p.Recipe != "" && !recipeFitsClass(*p.Recipe, b.Class) {
+			writeErr(w, http.StatusUnprocessableEntity, *p.Recipe+" cannot be produced in "+b.Class)
 			return
 		}
 		b.Recipe = *p.Recipe
@@ -352,18 +360,44 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 // exercise the endpoint's shape, not so the provider can reason about content.
 // Values are half-extents in centimetres about the buildable's origin.
 var mockClearance = map[string]api.Bounds{
-	"Build_Foundation_8x1_01_C": boundsFromHalfExtents(400, 400, 50),
-	"Build_Foundation_8x4_01_C": boundsFromHalfExtents(400, 400, 200),
-	"Build_ConstructorMk1_C":    boundsFromHalfExtents(395, 795, 200),
-	"Build_SmelterMk1_C":        boundsFromHalfExtents(295, 495, 200),
+	// Measured from a live game via GET /classes/{class}, not guessed. The
+	// first version of this table WAS guessed and two of four entries were
+	// badly wrong (a constructor's Y by ~6m), which is precisely the kind of
+	// lie that sends a grid layout astray - the thing this endpoint exists to
+	// prevent. Note the z origins differ by family: foundations are centred,
+	// machines sit on their base.
+	"Build_Foundation_8x1_01_C":          {Min: api.Vec3{X: -400, Y: -400, Z: -50}, Max: api.Vec3{X: 400, Y: 400, Z: 50}},
+	"Build_Foundation_8x4_01_C":          {Min: api.Vec3{X: -400, Y: -400, Z: -200}, Max: api.Vec3{X: 400, Y: 400, Z: 200}},
+	"Build_ConstructorMk1_C":             {Min: api.Vec3{X: -400, Y: -500, Z: 0}, Max: api.Vec3{X: 400, Y: 500, Z: 850}},
+	"Build_SmelterMk1_C":                 {Min: api.Vec3{X: -255, Y: -500, Z: 0}, Max: api.Vec3{X: 255, Y: 500, Z: 850}},
+	"Build_ManufacturerMk1_C":            {Min: api.Vec3{X: -900, Y: -1000, Z: 0}, Max: api.Vec3{X: 900, Y: 1000, Z: 1459.1}},
+	"Build_ConveyorAttachmentSplitter_C": {Min: api.Vec3{X: -200, Y: -200, Z: -80}, Max: api.Vec3{X: 200, Y: 200, Z: 180}},
+	// Belts genuinely declare no clearance - deliberately absent so the
+	// "bounds omitted" path is exercised by a real class, not a fake one.
 }
 
-func boundsFromHalfExtents(x, y, z float64) api.Bounds {
-	return api.Bounds{
-		Min:  api.Vec3{X: -x, Y: -y, Z: -z},
-		Max:  api.Vec3{X: x, Y: y, Z: z},
-		Size: api.Vec3{X: 2 * x, Y: 2 * y, Z: 2 * z},
+// recipeProducers mirrors the game's mProducedIn: which machine each recipe
+// can actually be made in. The real mod reads this from the recipe class;
+// the mock needs enough of it to reproduce the 422, because the game accepts
+// an impossible pairing silently (a smelter will happily display a
+// constructor recipe and simply never produce), so nothing else catches it.
+var recipeProducers = map[string]string{
+	"Recipe_IngotIron_C":   "Build_SmelterMk1_C",
+	"Recipe_IngotCopper_C": "Build_SmelterMk1_C",
+	"Recipe_IronPlate_C":   "Build_ConstructorMk1_C",
+	"Recipe_IronRod_C":     "Build_ConstructorMk1_C",
+	"Recipe_Wire_C":        "Build_ConstructorMk1_C",
+}
+
+// recipeFitsClass fails OPEN for recipes it has never heard of, matching the
+// mod: a wrong rejection breaks a legitimate apply, while a wrong acceptance
+// only yields a machine that does not run.
+func recipeFitsClass(recipe, class string) bool {
+	producer, known := recipeProducers[recipe]
+	if !known {
+		return true
 	}
+	return producer == class
 }
 
 func (s *Server) getBuildableClass(w http.ResponseWriter, r *http.Request) {
@@ -375,6 +409,7 @@ func (s *Server) getBuildableClass(w http.ResponseWriter, r *http.Request) {
 	out := api.BuildableClass{Class: class, Clearance: []api.ClearanceBox{}}
 	if b, ok := mockClearance[class]; ok {
 		bounds := b
+		bounds.Size = api.Vec3{X: b.Max.X - b.Min.X, Y: b.Max.Y - b.Min.Y, Z: b.Max.Z - b.Min.Z}
 		out.Bounds = &bounds
 		out.Clearance = []api.ClearanceBox{{Type: "default", Min: b.Min, Max: b.Max}}
 	}
