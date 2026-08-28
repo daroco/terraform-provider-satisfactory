@@ -376,14 +376,6 @@ var mockClearance = map[string]api.Bounds{
 	// "bounds omitted" path is exercised by a real class, not a fake one.
 }
 
-func boundsFromHalfExtents(x, y, z float64) api.Bounds {
-	return api.Bounds{
-		Min:  api.Vec3{X: -x, Y: -y, Z: -z},
-		Max:  api.Vec3{X: x, Y: y, Z: z},
-		Size: api.Vec3{X: 2 * x, Y: 2 * y, Z: 2 * z},
-	}
-}
-
 // recipeProducers mirrors the game's mProducedIn: which machine each recipe
 // can actually be made in. The real mod reads this from the recipe class;
 // the mock needs enough of it to reproduce the 422, because the game accepts
