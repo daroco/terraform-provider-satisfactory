@@ -523,3 +523,168 @@ func TestRecipeMustFitMachine(t *testing.T) {
 		t.Errorf("an unrecognised recipe should be allowed through, got %v", err)
 	}
 }
+
+// seededServer serves the sample hand-built world (foundations, two machines,
+// a belt) plus one player.
+func seededServer(t *testing.T) *client.Client {
+	t.Helper()
+	s := mockserver.New("")
+	s.Seed(mockserver.SampleHandBuiltWorld())
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	return client.New(srv.URL, "")
+}
+
+// The filter is required, not optional: a real save has tens of thousands of
+// buildables, and a caller who forgets it should find out here rather than by
+// hanging a live game.
+func TestWorldBuildablesRequiresSpatialFilter(t *testing.T) {
+	s := mockserver.New("")
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+
+	for _, q := range []string{
+		"",
+		"?x=0&y=0&z=0",
+		"?x=0&y=0&z=0&radius=0",
+		"?x=0&y=0&z=0&radius=100001",
+		"?x=nope&y=0&z=0&radius=100",
+	} {
+		resp, err := http.Get(srv.URL + "/api/v1/world/buildables" + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("GET /world/buildables%s = %d, want 422", q, resp.StatusCode)
+		}
+	}
+}
+
+func TestWorldBuildablesReportsUntrackedAndTracked(t *testing.T) {
+	c := seededServer(t)
+	ctx := context.Background()
+
+	created, err := c.CreateBuildable(ctx, api.Buildable{
+		TFID:      "tf-managed",
+		Class:     "Build_ConstructorMk1_C",
+		Transform: api.Transform{X: 100, Y: 100, Z: 20200},
+		Recipe:    "Recipe_IronPlate_C",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := c.ListWorldBuildables(ctx, 400, 400, 20200, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var tracked, untracked int
+	var sawManaged bool
+	for _, it := range items {
+		if it.TFID == "" {
+			untracked++
+			continue
+		}
+		tracked++
+		if it.TFID == created.TFID {
+			sawManaged = true
+		}
+	}
+	if !sawManaged {
+		t.Errorf("the buildable Terraform created is missing its tf_id; an exporter would duplicate it")
+	}
+	if tracked != 1 {
+		t.Errorf("tracked = %d, want 1", tracked)
+	}
+	// 4 foundations + 2 machines + 1 belt from the sample world.
+	if untracked != 7 {
+		t.Errorf("untracked = %d, want 7 (hand-built things are the point of this endpoint)", untracked)
+	}
+}
+
+// Foundations are lightweight instances rather than actors. They are reported
+// here precisely because actor-based enumeration cannot see them.
+func TestWorldBuildablesFlagsLightweight(t *testing.T) {
+	c := seededServer(t)
+	items, err := c.ListWorldBuildables(context.Background(), 400, 400, 20200, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundations, lightweight int
+	for _, it := range items {
+		if it.Class == "Build_Foundation_8x4_01_C" {
+			foundations++
+			if it.Lightweight {
+				lightweight++
+			}
+		}
+		if it.Class == "Build_SmelterMk1_C" && it.Lightweight {
+			t.Errorf("a smelter is an actor, not a lightweight instance")
+		}
+	}
+	if foundations == 0 || foundations != lightweight {
+		t.Errorf("got %d foundations, %d flagged lightweight; want them equal and non-zero", foundations, lightweight)
+	}
+}
+
+func TestWorldBuildablesRespectsRadius(t *testing.T) {
+	c := seededServer(t)
+	ctx := context.Background()
+
+	near, err := c.ListWorldBuildables(ctx, 0, 0, 20000, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	far, err := c.ListWorldBuildables(ctx, 0, 0, 20000, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(near) >= len(far) {
+		t.Errorf("radius 100 returned %d and radius 5000 returned %d; the filter does nothing", len(near), len(far))
+	}
+	if len(near) != 1 {
+		t.Errorf("only the foundation at the origin is within 100cm, got %d", len(near))
+	}
+}
+
+// Index is how an untracked buildable is referred to at all, so it must match
+// the entry's position in the response.
+func TestWorldBuildablesIndexMatchesPosition(t *testing.T) {
+	c := seededServer(t)
+	items, err := c.ListWorldBuildables(context.Background(), 400, 400, 20200, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, it := range items {
+		if it.Index != int64(i) {
+			t.Errorf("items[%d].Index = %d", i, it.Index)
+		}
+	}
+}
+
+func TestPlayers(t *testing.T) {
+	c := seededServer(t)
+	players, err := c.ListPlayers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(players) != 1 || players[0].Name != "pioneer" {
+		t.Fatalf("players = %+v", players)
+	}
+	if players[0].Location.X != 400 {
+		t.Errorf("location = %+v", players[0].Location)
+	}
+
+	// An empty world must still answer with an array, not null: an exporter
+	// that ranges over the result should get zero players, not a nil panic.
+	empty := newTestClient(t)
+	got, err := empty.ListPlayers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("players = %+v, want empty", got)
+	}
+}

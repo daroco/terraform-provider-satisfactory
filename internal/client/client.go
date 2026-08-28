@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,27 @@ func (c *Client) Health(ctx context.Context) error {
 func (c *Client) GetBuildableClass(ctx context.Context, class string) (api.BuildableClass, error) {
 	var out api.BuildableClass
 	err := c.do(ctx, http.MethodGet, "/classes/"+url.PathEscape(class), nil, &out)
+	return out, err
+}
+
+// ListWorldBuildables reports every buildable within radius centimetres of
+// (x,y,z), including ones no Terraform config created. Those come back with an
+// empty TFID and are identified only by their index within the response.
+func (c *Client) ListWorldBuildables(ctx context.Context, x, y, z, radius float64) ([]api.WorldBuildable, error) {
+	q := url.Values{}
+	q.Set("x", strconv.FormatFloat(x, 'f', -1, 64))
+	q.Set("y", strconv.FormatFloat(y, 'f', -1, 64))
+	q.Set("z", strconv.FormatFloat(z, 'f', -1, 64))
+	q.Set("radius", strconv.FormatFloat(radius, 'f', -1, 64))
+	var out []api.WorldBuildable
+	err := c.do(ctx, http.MethodGet, "/world/buildables?"+q.Encode(), nil, &out)
+	return out, err
+}
+
+// ListPlayers reports connected players that have spawned in.
+func (c *Client) ListPlayers(ctx context.Context) ([]api.Player, error) {
+	var out []api.Player
+	err := c.do(ctx, http.MethodGet, "/players", nil, &out)
 	return out, err
 }
 

@@ -13,9 +13,13 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8090", "listen address")
+	seed := flag.Bool("seed", false, "populate a small hand-built factory and a player, so `satisfactory-export` has something to find")
 	flag.Parse()
 
 	srv := mockserver.New(os.Getenv("SATISFACTORY_TOKEN"))
+	if *seed {
+		srv.Seed(mockserver.SampleHandBuiltWorld())
+	}
 	log.Printf("mock SatisfactoTerraform API listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, srv.Handler()))
 }

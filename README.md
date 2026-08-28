@@ -56,6 +56,7 @@ built around — see **[docs/design/lifecycle.md](docs/design/lifecycle.md)**.
 | `internal/provider` | Terraform provider (4 resources) |
 | `internal/client`, `internal/api` | API client + shared wire types |
 | `internal/mockserver`, `cmd/mockserver` | In-memory mock of the mod API |
+| `internal/export`, `cmd/satisfactory-export` | Turns a live region into shareable HCL |
 | `examples/factory-hub` | Hub-and-spoke layout (merger/splitter star topology) |
 | `examples/iron-plate-line` | Minimal working example config |
 | `examples/factory-floor` | Range/grid placement example (`modules/grid-2d`) |
@@ -155,6 +156,44 @@ no space, and a config that depends on a size will fail loudly rather than
 silently stack things. The provider does not enforce clearance: placing through
 the API deliberately bypasses the game's placement rules, so overlapping is
 allowed and this data is advisory.
+
+## Exporting what you built by hand
+
+Building in-game is faster than writing HCL, and most factories start that
+way. `satisfactory-export` reads a region of a running world and writes it out
+as configuration:
+
+```sh
+go build -o satisfactory-export ./cmd/satisfactory-export
+
+# Stand where you want the export centred, then:
+./satisfactory-export -at-player -radius 5000 -out blueprint.tf
+```
+
+The output is a blueprint, not a recording: every position is an offset from a
+`var.origin`, so the same file rebuilds the factory anywhere.
+
+```sh
+terraform apply -var 'origin={x=50000,y=50000,z=20000}'
+```
+
+Two things it will tell you rather than guess about:
+
+- **Belts and power lines are listed, not exported.** They are defined by which
+  connectors they join, and that graph is not part of world enumeration yet. A
+  belt emitted from its position alone would apply cleanly and build a factory
+  that does not run, so the generator leaves it out and names it in a comment.
+- **Buildables Terraform already manages are reported separately**, because
+  exporting one of those and applying it elsewhere builds a *second* copy. There
+  is no adoption path yet - `terraform import` for hand-built things needs the
+  mod to assign tf_ids to buildables it did not place.
+
+To try it without the game, seed the mock with a small hand-built factory:
+
+```sh
+go run ./cmd/mockserver -seed &
+./satisfactory-export -at-player -radius 5000
+```
 
 ## Developing without the game
 

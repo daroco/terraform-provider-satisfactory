@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -20,6 +22,14 @@ type Server struct {
 	buildables  map[string]api.Buildable
 	connections map[string]api.Connection
 	token       string
+
+	// Buildables the "player" made by hand: they have no tf_id and are
+	// invisible to /buildables, but GET /world/buildables must report them.
+	// Seeded by tests and by cmd/mockserver so export tooling has something
+	// untracked to find - without them the mock can only ever produce a world
+	// Terraform already owns, which is the uninteresting half of export.
+	untracked []api.WorldBuildable
+	players   []api.Player
 }
 
 // New returns a mock server. token is optional; when set, every request except
@@ -47,6 +57,8 @@ func (s *Server) Handler() http.Handler {
 	}))
 
 	mux.HandleFunc("GET /api/v1/classes/{class}", s.auth(s.getBuildableClass))
+	mux.HandleFunc("GET /api/v1/world/buildables", s.auth(s.listWorldBuildables))
+	mux.HandleFunc("GET /api/v1/players", s.auth(s.listPlayers))
 
 	mux.HandleFunc("GET /api/v1/buildables", s.auth(s.listBuildables))
 	mux.HandleFunc("POST /api/v1/buildables", s.auth(s.createBuildable))
@@ -339,6 +351,25 @@ func isManufacturerClass(class string) bool {
 	return false
 }
 
+// lightweightClassPrefixes are the structural buildables the game converts to
+// non-actor lightweight instances. The mock tracks this only so that
+// /world/buildables reports the same "lightweight" flag the mod does; nothing
+// else in the mock behaves differently for them.
+var lightweightClassPrefixes = []string{
+	"Build_Foundation", "Build_Wall", "Build_Ramp", "Build_Roof",
+	"Build_QuarterPipe", "Build_Fence", "Build_Barrier", "Build_Pillar",
+	"Build_Stair", "Build_Catwalk", "Build_Beam", "Build_Wall_Conveyor",
+}
+
+func isLightweightClass(class string) bool {
+	for _, p := range lightweightClassPrefixes {
+		if strings.HasPrefix(class, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -414,4 +445,136 @@ func (s *Server) getBuildableClass(w http.ResponseWriter, r *http.Request) {
 		out.Clearance = []api.ClearanceBox{{Type: "default", Min: b.Min, Max: b.Max}}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// Seed adds buildables and players that the mod would report as existing in
+// the world but that Terraform never created. Call before serving.
+func (s *Server) Seed(untracked []api.WorldBuildable, players []api.Player) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.untracked = append(s.untracked, untracked...)
+	s.players = append(s.players, players...)
+}
+
+// listWorldBuildables reports everything within a sphere, tracked or not.
+// The spatial filter is required, matching the mod: a real save has far too
+// many buildables to return unfiltered, and a caller that forgets the filter
+// should find that out against the mock rather than against a live game.
+func (s *Server) listWorldBuildables(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	var center api.Vec3
+	var radius float64
+	for _, p := range []struct {
+		name string
+		out  *float64
+	}{{"x", &center.X}, {"y", &center.Y}, {"z", &center.Z}, {"radius", &radius}} {
+		raw := q.Get(p.name)
+		if raw == "" {
+			writeErr(w, http.StatusUnprocessableEntity, "x, y, z and radius query parameters are all required")
+			return
+		}
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			writeErr(w, http.StatusUnprocessableEntity, p.name+" must be a number")
+			return
+		}
+		*p.out = v
+	}
+	if radius <= 0 || radius > 100000 {
+		writeErr(w, http.StatusUnprocessableEntity, "radius must be between 0 and 100000 centimetres")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	within := func(t api.Transform) bool {
+		dx, dy, dz := t.X-center.X, t.Y-center.Y, t.Z-center.Z
+		return dx*dx+dy*dy+dz*dz <= radius*radius
+	}
+
+	// Sorted for a stable response: generated HCL is diffed and committed, so
+	// a stable order is the difference between a readable diff and noise.
+	tracked := make([]api.Buildable, 0, len(s.buildables))
+	for _, b := range s.buildables {
+		if within(b.Transform) {
+			tracked = append(tracked, b)
+		}
+	}
+	sort.Slice(tracked, func(i, j int) bool { return tracked[i].TFID < tracked[j].TFID })
+
+	out := []api.WorldBuildable{}
+	for _, b := range tracked {
+		out = append(out, api.WorldBuildable{
+			TFID:        b.TFID,
+			Class:       b.Class,
+			Transform:   b.Transform,
+			Lightweight: isLightweightClass(b.Class),
+			Recipe:      b.Recipe,
+			ClockSpeed:  b.ClockSpeed,
+		})
+	}
+	for _, b := range s.untracked {
+		if within(b.Transform) {
+			b.TFID = "" // untracked by definition; ignore anything seeded there
+			out = append(out, b)
+		}
+	}
+	for i := range out {
+		out[i].Index = int64(i)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.players == nil {
+		writeJSON(w, http.StatusOK, []api.Player{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.players)
+}
+
+// SampleHandBuiltWorld is a small factory that nothing in Terraform created:
+// a 2x2 floor, a smelter feeding a constructor, and the belt between them.
+// It gives `satisfactory-export` something to export against the mock, and
+// gives CI a fixed world to assert generated configuration against.
+func SampleHandBuiltWorld() ([]api.WorldBuildable, []api.Player) {
+	const tile = 800 // Build_Foundation_8x4_01_C
+	world := []api.WorldBuildable{}
+	for _, p := range [][2]float64{{0, 0}, {tile, 0}, {0, tile}, {tile, tile}} {
+		world = append(world, api.WorldBuildable{
+			Class:       "Build_Foundation_8x4_01_C",
+			Transform:   api.Transform{X: p[0], Y: p[1], Z: 20000},
+			Lightweight: true,
+		})
+	}
+	world = append(world,
+		api.WorldBuildable{
+			Class:      "Build_SmelterMk1_C",
+			Transform:  api.Transform{X: 200, Y: 200, Z: 20200, Yaw: 90},
+			Recipe:     "Recipe_IngotIron_C",
+			ClockSpeed: 1,
+		},
+		api.WorldBuildable{
+			Class:      "Build_ConstructorMk1_C",
+			Transform:  api.Transform{X: 200, Y: 1000, Z: 20200, Yaw: 90},
+			Recipe:     "Recipe_IronPlate_C",
+			ClockSpeed: 1.5,
+		},
+		// Belts are enumerated but cannot be exported from a position alone;
+		// generated configuration says so rather than emitting a belt to
+		// nowhere.
+		api.WorldBuildable{
+			Class:     "Build_ConveyorBeltMk1_C",
+			Transform: api.Transform{X: 200, Y: 600, Z: 20200},
+		},
+	)
+	players := []api.Player{{
+		Name:     "pioneer",
+		Location: api.Vec3{X: 400, Y: 400, Z: 20200},
+		Yaw:      45,
+	}}
+	return world, players
 }

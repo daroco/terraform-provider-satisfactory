@@ -25,6 +25,7 @@ go test ./...                             # unit tests (api, mockserver, client)
 TF_ACC=1 go test ./internal/provider/ -v  # acceptance tests (needs terraform in PATH
                                           #   or TF_ACC_TERRAFORM_PATH=<binary>)
 go run ./cmd/mockserver                   # fake world on :8090
+go run ./cmd/mockserver -seed             # ... plus a hand-built factory to export
 ```
 
 Full dev loop for applying the example against the mock: see the
@@ -38,6 +39,10 @@ Full dev loop for applying the example against the mock: see the
 - `internal/mockserver` — in-memory mod API; mirror every contract change here
 - `internal/provider` — terraform-plugin-framework provider; 4 resources
 - `cmd/mockserver` — runnable mock
+- `internal/export`, `cmd/satisfactory-export` — the read direction: a region of
+  a live world → shareable HCL. Positions are emitted relative to a
+  `var.origin`, never absolute; belts/wires are listed but not generated
+  (they are defined by what they connect, and that graph does not exist yet).
 - `examples/iron-plate-line` — canonical minimal example; CI applies it against the mock
 - `examples/factory-floor` — range/grid placement example (`modules/grid-2d`);
   every `examples/*` directory is applied/planned/destroyed in CI

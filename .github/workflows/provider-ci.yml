@@ -57,6 +57,47 @@ jobs:
         env:
           TF_ACC: "1"
 
+      - name: Export round-trip (world -> HCL -> apply -> no drift)
+        run: |
+          # The only convincing test of an exporter is that its output is real
+          # configuration: generate from a seeded world, then apply what came
+          # out and check the plan is empty afterwards.
+          go build -o /tmp/terraform-provider-satisfactory .
+          go build -o /tmp/mockserver ./cmd/mockserver
+          go build -o /tmp/satisfactory-export ./cmd/satisfactory-export
+          /tmp/mockserver -addr :8091 -seed &
+          MOCK_PID=$!
+          trap "kill $MOCK_PID" EXIT
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8091/api/v1/health && break
+            [ "$i" = 30 ] && { echo "mockserver never became healthy"; exit 1; }
+            sleep 1
+          done
+
+          mkdir -p /tmp/exported
+          /tmp/satisfactory-export -endpoint http://localhost:8091             -at-player -radius 5000 -name "round-trip" -out /tmp/exported/main.tf
+          echo "--- generated ---"
+          cat /tmp/exported/main.tf
+
+          cat > /tmp/dev.tfrc <<EOF
+          provider_installation {
+            dev_overrides {
+              "daroco/satisfactory" = "/tmp"
+            }
+            direct {}
+          }
+          EOF
+          export TF_CLI_CONFIG_FILE=/tmp/dev.tfrc
+          export SATISFACTORY_ENDPOINT=http://localhost:8091
+
+          # Applied at a different origin than it was exported from: a
+          # blueprint that only works where it came from is not a blueprint.
+          cd /tmp/exported
+          terraform get
+          terraform apply -auto-approve -var 'origin={x=50000,y=50000,z=20000}'
+          terraform plan -detailed-exitcode -var 'origin={x=50000,y=50000,z=20000}'
+          terraform destroy -auto-approve -var 'origin={x=50000,y=50000,z=20000}'
+
       - name: Example applies against mockserver
         run: |
           go build -o /tmp/terraform-provider-satisfactory .
