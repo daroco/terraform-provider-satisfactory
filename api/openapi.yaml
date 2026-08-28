@@ -40,6 +40,62 @@ paths:
                   session_name: { type: string }
                   game_version: { type: string }
                   mod_version: { type: string }
+  /world/buildables:
+    get:
+      summary: Everything near a point, whether Terraform placed it or not
+      description: >
+        Read-only enumeration used by export/blueprint tooling. Unlike
+        /buildables (which lists only what this mod placed and tracks by
+        tf_id), this reports the world as it actually is, so a factory built
+        by hand can be turned into configuration.
+
+
+        The spatial filter is required rather than optional: a mature save
+        holds tens of thousands of buildables and returning all of them is
+        unusable. Entries the mod already tracks carry their tf_id; entries
+        without one were built in-game.
+      parameters:
+        - name: x
+          in: query
+          required: true
+          schema: { type: number }
+          description: Centre of the search sphere, in centimetres.
+        - name: y
+          in: query
+          required: true
+          schema: { type: number }
+        - name: z
+          in: query
+          required: true
+          schema: { type: number }
+        - name: radius
+          in: query
+          required: true
+          schema: { type: number, minimum: 0, maximum: 100000 }
+          description: Search radius in centimetres (max 100000, i.e. 1 km).
+      responses:
+        "200":
+          description: Buildables within the radius.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorldBuildable" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /players:
+    get:
+      summary: Where the players are standing
+      description: >
+        Lets export tooling anchor output to a player's position rather than
+        to absolute world coordinates.
+      responses:
+        "200":
+          description: Connected players that have spawned in.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Player" }
   /classes/{class}:
     get:
       summary: Static, spawn-free facts about a buildable class
@@ -291,6 +347,41 @@ components:
             manufacturer buildables, where it defaults to 1.0 on create;
             omitted from every response for other classes (there is no
             universal default - a splitter simply has no clock).
+    WorldBuildable:
+      type: object
+      required: [index, class, transform, lightweight]
+      properties:
+        index:
+          type: integer
+          description: >
+            Position in this response, and the only way to refer to an
+            untracked buildable - it has no tf_id. Stable only within a single
+            response; do not persist it.
+        tf_id:
+          type: string
+          description: >
+            Present only when this buildable is one the mod placed and still
+            tracks. Absent means it was built in-game, so exporting it would
+            create a second one rather than adopt it.
+        class: { type: string }
+        transform: { $ref: "#/components/schemas/Transform" }
+        lightweight:
+          type: boolean
+          description: >
+            True for buildables the game stores as lightweight instances
+            rather than actors (foundations, walls, ramps, ...). Informational:
+            it explains why such entries carry no runtime state, and they are
+            reported here precisely because they are invisible to actor-based
+            enumeration.
+        recipe: { type: string }
+        clock_speed: { type: number }
+    Player:
+      type: object
+      required: [location]
+      properties:
+        name: { type: string }
+        location: { $ref: "#/components/schemas/Vec3" }
+        yaw: { type: number }
     ConnectionEndpoint:
       type: object
       required: [buildable_tf_id, connector]

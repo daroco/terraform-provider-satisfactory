@@ -89,3 +89,25 @@ type BuildableClass struct {
 	// Bounds is nil when the class declares no clearance, which is common.
 	Bounds *Bounds `json:"bounds,omitempty"`
 }
+
+// WorldBuildable is one entry from GET /world/buildables: the world as it
+// actually is, not as Terraform believes it to be. TFID is empty for anything
+// built in-game, which is the whole point of the endpoint.
+type WorldBuildable struct {
+	// Index is the only handle an untracked buildable has. It is valid within
+	// one response and nowhere else.
+	Index       int64     `json:"index"`
+	TFID        string    `json:"tf_id,omitempty"`
+	Class       string    `json:"class"`
+	Transform   Transform `json:"transform"`
+	Lightweight bool      `json:"lightweight"`
+	Recipe      string    `json:"recipe,omitempty"`
+	ClockSpeed  float64   `json:"clock_speed,omitempty"`
+}
+
+// Player is one entry from GET /players.
+type Player struct {
+	Name     string  `json:"name,omitempty"`
+	Location Vec3    `json:"location"`
+	Yaw      float64 `json:"yaw"`
+}
