@@ -103,6 +103,26 @@ type WorldBuildable struct {
 	Lightweight bool      `json:"lightweight"`
 	Recipe      string    `json:"recipe,omitempty"`
 	ClockSpeed  float64   `json:"clock_speed,omitempty"`
+	// Connects is set for belts and wires whose two ends are both inside the
+	// queried radius. A partially known connection is omitted rather than
+	// guessed: a wrong connector index yields config that applies cleanly and
+	// wires the wrong port.
+	Connects *WorldConnection `json:"connects,omitempty"`
+}
+
+// WorldConnection is the pair of buildables a belt or wire joins, by their
+// index within the same response.
+type WorldConnection struct {
+	From WorldEndpoint `json:"from"`
+	To   WorldEndpoint `json:"to"`
+}
+
+// WorldEndpoint identifies one end of a connection.
+type WorldEndpoint struct {
+	Index int64 `json:"index"`
+	// Connector uses the same ordering POST /connections accepts, so an
+	// exported connection can be re-created against the same port.
+	Connector int64 `json:"connector"`
 }
 
 // Player is one entry from GET /players.

@@ -130,3 +130,81 @@ func TestGenerateDeclaresTheProvider(t *testing.T) {
 		t.Errorf("no required_providers block:\n%s", res.HCL)
 	}
 }
+
+// connected returns a smelter, a constructor, and the belt joining them.
+func connected() []api.WorldBuildable {
+	return []api.WorldBuildable{
+		{Index: 0, Class: "Build_SmelterMk1_C", Transform: api.Transform{X: 0, Y: 0, Z: 0}, Recipe: "Recipe_IngotIron_C"},
+		{Index: 1, Class: "Build_ConstructorMk1_C", Transform: api.Transform{X: 0, Y: 800, Z: 0}, Recipe: "Recipe_IronPlate_C"},
+		{Index: 2, Class: "Build_ConveyorBeltMk1_C", Transform: api.Transform{X: 0, Y: 400, Z: 0},
+			Connects: &api.WorldConnection{
+				From: api.WorldEndpoint{Index: 0, Connector: 1},
+				To:   api.WorldEndpoint{Index: 1, Connector: 0},
+			}},
+	}
+}
+
+func TestGenerateEmitsBeltsReferencingTheirEndpoints(t *testing.T) {
+	res := Generate(connected(), Options{})
+	if !strings.Contains(res.HCL, `resource "satisfactory_belt"`) {
+		t.Fatalf("no belt emitted:\n%s", res.HCL)
+	}
+	if !hasAttr(res.HCL, "from_id", "satisfactory_building.smeltermk1_0.id") {
+		t.Errorf("belt should reference the smelter resource, not an id literal:\n%s", res.HCL)
+	}
+	if !hasAttr(res.HCL, "to_id", "satisfactory_building.constructormk1_0.id") {
+		t.Errorf("belt should reference the constructor resource:\n%s", res.HCL)
+	}
+	if !hasAttr(res.HCL, "from_connector", "1") || !hasAttr(res.HCL, "to_connector", "0") {
+		t.Errorf("connector indices lost:\n%s", res.HCL)
+	}
+	if len(res.Skipped) != 0 {
+		t.Errorf("Skipped = %v, want nothing skipped", res.Skipped)
+	}
+}
+
+// The mod omits `connects` when one end falls outside the exported radius.
+// Guessing an endpoint would wire the belt to whatever sits at that index.
+func TestGenerateSkipsConnectionsWithUnresolvableEnds(t *testing.T) {
+	items := connected()
+	items[2].Connects.To.Index = 99 // never enumerated
+	res := Generate(items, Options{})
+	if strings.Contains(res.HCL, `resource "satisfactory_belt"`) {
+		t.Errorf("a belt with an unknown end must not be emitted:\n%s", res.HCL)
+	}
+	if res.Skipped["Build_ConveyorBeltMk1_C"] != 1 {
+		t.Errorf("Skipped = %v, want the belt counted", res.Skipped)
+	}
+}
+
+func TestGenerateSkipsConnectionTypesWithNoResource(t *testing.T) {
+	items := connected()
+	items[2].Class = "Build_Pipeline_C" // no provider resource for pipes yet
+	res := Generate(items, Options{})
+	if strings.Contains(res.HCL, "Build_Pipeline_C\"\n") {
+		t.Errorf("pipelines have no resource type and must not be emitted:\n%s", res.HCL)
+	}
+	if res.Skipped["Build_Pipeline_C"] != 1 {
+		t.Errorf("Skipped = %v", res.Skipped)
+	}
+}
+
+// Terraform resolves ordering from references, but a file where a belt appears
+// before the machines it names is confusing to read and to edit.
+func TestGenerateWritesConnectionsAfterBuildables(t *testing.T) {
+	res := Generate(connected(), Options{})
+	belt := strings.Index(res.HCL, `resource "satisfactory_belt"`)
+	last := strings.LastIndex(res.HCL, `resource "satisfactory_building"`)
+	if belt < last {
+		t.Errorf("belt emitted before the buildables it references:\n%s", res.HCL)
+	}
+}
+
+func TestGeneratePowerLinesUseTheirOwnResource(t *testing.T) {
+	items := connected()
+	items[2].Class = "Build_PowerLine_C"
+	res := Generate(items, Options{})
+	if !strings.Contains(res.HCL, `resource "satisfactory_power_line"`) {
+		t.Errorf("power lines need satisfactory_power_line, not satisfactory_belt:\n%s", res.HCL)
+	}
+}

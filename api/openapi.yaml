@@ -375,6 +375,33 @@ components:
             enumeration.
         recipe: { type: string }
         clock_speed: { type: number }
+        connects:
+          $ref: "#/components/schemas/WorldConnection"
+    WorldConnection:
+      type: object
+      required: [from, to]
+      description: >
+        For a belt or wire, the two buildables it joins. Present only when both
+        ends are inside the queried radius and both connector indices could be
+        determined - a partially known connection is omitted rather than
+        guessed, because a wrong connector index produces configuration that
+        applies cleanly and wires the wrong port.
+      properties:
+        from: { $ref: "#/components/schemas/WorldEndpoint" }
+        to: { $ref: "#/components/schemas/WorldEndpoint" }
+    WorldEndpoint:
+      type: object
+      required: [index, connector]
+      properties:
+        index:
+          type: integer
+          description: Index of the buildable in this same response.
+        connector:
+          type: integer
+          description: >
+            Connector index on that buildable, in the same ordering
+            POST /connections accepts - so an exported connection can be
+            re-created against the same port.
     Player:
       type: object
       required: [location]

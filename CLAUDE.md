@@ -41,8 +41,10 @@ Full dev loop for applying the example against the mock: see the
 - `cmd/mockserver` — runnable mock
 - `internal/export`, `cmd/satisfactory-export` — the read direction: a region of
   a live world → shareable HCL. Positions are emitted relative to a
-  `var.origin`, never absolute; belts/wires are listed but not generated
-  (they are defined by what they connect, and that graph does not exist yet).
+  `var.origin`, never absolute. Belts/wires are generated from the world
+  connection graph, but only when both ends are in range and both connector
+  indices are known - a guessed connector applies cleanly and wires the
+  wrong port, so unresolvable ones are listed in a comment instead.
 - `examples/iron-plate-line` — canonical minimal example; CI applies it against the mock
 - `examples/factory-floor` — range/grid placement example (`modules/grid-2d`);
   every `examples/*` directory is applied/planned/destroyed in CI

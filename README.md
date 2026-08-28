@@ -177,16 +177,20 @@ The output is a blueprint, not a recording: every position is an offset from a
 terraform apply -var 'origin={x=50000,y=50000,z=20000}'
 ```
 
-Two things it will tell you rather than guess about:
+Belts and power lines come out as `satisfactory_belt` / `satisfactory_power_line`
+resources referencing the machines they join, so an exported factory is wired,
+not just placed. Two things the exporter reports rather than guesses at:
 
-- **Belts and power lines are listed, not exported.** They are defined by which
-  connectors they join, and that graph is not part of world enumeration yet. A
-  belt emitted from its position alone would apply cleanly and build a factory
-  that does not run, so the generator leaves it out and names it in a comment.
-- **Buildables Terraform already manages are reported separately**, because
-  exporting one of those and applying it elsewhere builds a *second* copy. There
-  is no adoption path yet - `terraform import` for hand-built things needs the
-  mod to assign tf_ids to buildables it did not place.
+- **A connection with an end outside the exported region is left out** and
+  named in a trailing comment. Both ends have to be in range, and the game has
+  to report both connector indices; a guessed index produces configuration
+  that applies cleanly and wires the wrong port. Widen `-radius` to pick the
+  rest up. Pipelines and hypertubes have no provider resource yet and are
+  always listed this way.
+- **Buildables Terraform already manages are counted separately**, because
+  exporting one and applying it elsewhere builds a *second* copy. There is no
+  adoption path yet - `terraform import` for hand-built things needs the mod to
+  assign tf_ids to buildables it did not place.
 
 To try it without the game, seed the mock with a small hand-built factory:
 
