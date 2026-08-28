@@ -503,8 +503,13 @@ func (s *Server) listWorldBuildables(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(tracked, func(i, j int) bool { return tracked[i].TFID < tracked[j].TFID })
 
+	// Response indices are assigned as entries are appended, and connections
+	// refer to them - so endpoints are resolved only after everything in range
+	// is collected.
 	out := []api.WorldBuildable{}
+	tfidToIndex := map[string]int64{}
 	for _, b := range tracked {
+		tfidToIndex[b.TFID] = int64(len(out))
 		out = append(out, api.WorldBuildable{
 			TFID:        b.TFID,
 			Class:       b.Class,
@@ -514,12 +519,62 @@ func (s *Server) listWorldBuildables(w http.ResponseWriter, r *http.Request) {
 			ClockSpeed:  b.ClockSpeed,
 		})
 	}
-	for _, b := range s.untracked {
-		if within(b.Transform) {
-			b.TFID = "" // untracked by definition; ignore anything seeded there
-			out = append(out, b)
+	seedToIndex := map[int]int64{}
+	for i, b := range s.untracked {
+		if !within(b.Transform) {
+			continue
+		}
+		seedToIndex[i] = int64(len(out))
+		b.TFID = "" // untracked by definition; ignore anything seeded there
+		out = append(out, b)
+	}
+
+	// A seeded belt names its ends by their position in the seed; translate to
+	// response indices, and drop the connection outright if an end fell
+	// outside the radius. Half a connection is worse than none: it would be
+	// re-created against whatever happened to sit at that index.
+	for i := range out {
+		if out[i].Connects == nil {
+			continue
+		}
+		from, fromOK := seedToIndex[int(out[i].Connects.From.Index)]
+		to, toOK := seedToIndex[int(out[i].Connects.To.Index)]
+		if !fromOK || !toOK {
+			out[i].Connects = nil
+			continue
+		}
+		out[i].Connects = &api.WorldConnection{
+			From: api.WorldEndpoint{Index: from, Connector: out[i].Connects.From.Connector},
+			To:   api.WorldEndpoint{Index: to, Connector: out[i].Connects.To.Connector},
 		}
 	}
+
+	// Belts and wires Terraform created are buildables in the world too. The
+	// mock stores them without a position (the contract does not give
+	// connections one), so they are reported at the midpoint of the two
+	// buildables they join - enough for a spatial query to behave sensibly.
+	for _, conn := range s.connections {
+		fromIdx, okFrom := tfidToIndex[conn.From.BuildableTFID]
+		toIdx, okTo := tfidToIndex[conn.To.BuildableTFID]
+		if !okFrom || !okTo {
+			continue
+		}
+		a, b := out[fromIdx].Transform, out[toIdx].Transform
+		mid := api.Transform{X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2, Z: (a.Z + b.Z) / 2}
+		if !within(mid) {
+			continue
+		}
+		out = append(out, api.WorldBuildable{
+			TFID:      conn.TFID,
+			Class:     conn.Class,
+			Transform: mid,
+			Connects: &api.WorldConnection{
+				From: api.WorldEndpoint{Index: fromIdx, Connector: conn.From.Connector},
+				To:   api.WorldEndpoint{Index: toIdx, Connector: conn.To.Connector},
+			},
+		})
+	}
+
 	for i := range out {
 		out[i].Index = int64(i)
 	}
@@ -563,14 +618,19 @@ func SampleHandBuiltWorld() ([]api.WorldBuildable, []api.Player) {
 			Recipe:     "Recipe_IronPlate_C",
 			ClockSpeed: 1.5,
 		},
-		// Belts are enumerated but cannot be exported from a position alone;
-		// generated configuration says so rather than emitting a belt to
-		// nowhere.
+		// The belt joins them, output connector of the smelter to input
+		// connector of the constructor. Indices here are positions in this
+		// slice; listWorldBuildables translates them to response indices.
 		api.WorldBuildable{
 			Class:     "Build_ConveyorBeltMk1_C",
 			Transform: api.Transform{X: 200, Y: 600, Z: 20200},
+			Connects: &api.WorldConnection{
+				From: api.WorldEndpoint{Index: 4, Connector: 1},
+				To:   api.WorldEndpoint{Index: 5, Connector: 0},
+			},
 		},
 	)
+
 	players := []api.Player{{
 		Name:     "pioneer",
 		Location: api.Vec3{X: 400, Y: 400, Z: 20200},

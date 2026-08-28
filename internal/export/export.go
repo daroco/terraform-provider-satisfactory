@@ -54,6 +54,21 @@ func isConnectionClass(class string) bool {
 	return false
 }
 
+// connectionResourceType maps a belt or wire class to the resource that can
+// rebuild it, or "" for connections the provider has no resource for yet
+// (pipelines and hypertubes). Exporting one of those as a positional
+// resource would produce configuration that applies and does nothing.
+func connectionResourceType(class string) string {
+	switch {
+	case strings.HasPrefix(class, "Build_ConveyorBelt"), strings.HasPrefix(class, "Build_ConveyorLift"):
+		return "satisfactory_belt"
+	case strings.HasPrefix(class, "Build_PowerLine"):
+		return "satisfactory_power_line"
+	default:
+		return ""
+	}
+}
+
 var nonIdent = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 
 // resourceBaseName turns Build_Foundation_8x4_01_C into foundation_8x4_01.
@@ -139,11 +154,17 @@ func Generate(items []api.WorldBuildable, opts Options) Result {
 		num(opts.Origin.X), num(opts.Origin.Y), num(opts.Origin.Z))
 	b.WriteString("}\n")
 
+	// Labels are assigned before anything is written, because a belt refers to
+	// the two buildables it joins and either of them may be emitted after it.
+	// WorldBuildable.Index is the response-local handle those references use.
+	type placed struct {
+		kind  string
+		label string
+	}
+	byIndex := map[int64]placed{}
 	used := map[string]int{}
-	emitted := 0
 	for _, it := range sorted {
 		if isConnectionClass(it.Class) {
-			res.Skipped[it.Class]++
 			continue
 		}
 		kind := "satisfactory_building"
@@ -153,6 +174,30 @@ func Generate(items []api.WorldBuildable, opts Options) Result {
 		base := resourceBaseName(it.Class)
 		label := fmt.Sprintf("%s_%d", base, used[base])
 		used[base]++
+		byIndex[it.Index] = placed{kind, label}
+	}
+
+	emitted := 0
+	writeBlock := func(kind, label string, attrs [][2]string) {
+		fmt.Fprintf(&b, "\nresource %q %q {\n", kind, label)
+		width := 0
+		for _, a := range attrs {
+			if len(a[0]) > width {
+				width = len(a[0])
+			}
+		}
+		for _, a := range attrs {
+			fmt.Fprintf(&b, "  %-*s = %s\n", width, a[0], a[1])
+		}
+		b.WriteString("}\n")
+		emitted++
+	}
+
+	for _, it := range sorted {
+		if isConnectionClass(it.Class) {
+			continue
+		}
+		p := byIndex[it.Index]
 
 		dx := it.Transform.X - opts.Origin.X
 		dy := it.Transform.Y - opts.Origin.Y
@@ -173,24 +218,46 @@ func Generate(items []api.WorldBuildable, opts Options) Result {
 		if it.ClockSpeed != 0 && it.ClockSpeed != 1 {
 			attrs = append(attrs, [2]string{"clock_speed", num(it.ClockSpeed)})
 		}
+		writeBlock(p.kind, p.label, attrs)
+	}
 
-		fmt.Fprintf(&b, "\nresource %q %q {\n", kind, label)
-		width := 0
-		for _, a := range attrs {
-			if len(a[0]) > width {
-				width = len(a[0])
-			}
+	// Connections last: they reference the resources above, and Terraform
+	// works out the ordering from those references rather than from the file.
+	for _, it := range sorted {
+		if !isConnectionClass(it.Class) {
+			continue
 		}
-		for _, a := range attrs {
-			fmt.Fprintf(&b, "  %-*s = %s\n", width, a[0], a[1])
+		kind := connectionResourceType(it.Class)
+		var from, to placed
+		okFrom, okTo := false, false
+		if it.Connects != nil {
+			from, okFrom = byIndex[it.Connects.From.Index]
+			to, okTo = byIndex[it.Connects.To.Index]
 		}
-		b.WriteString("}\n")
-		emitted++
+		if kind == "" || !okFrom || !okTo {
+			// Either the mod could not resolve both ends (one lay outside the
+			// exported radius), or this is something with no resource type
+			// yet, like a pipeline. Naming it in a comment beats emitting a
+			// connection to nowhere.
+			res.Skipped[it.Class]++
+			continue
+		}
+		base := resourceBaseName(it.Class)
+		label := fmt.Sprintf("%s_%d", base, used[base])
+		used[base]++
+		writeBlock(kind, label, [][2]string{
+			{"class", fmt.Sprintf("%q", it.Class)},
+			{"from_id", fmt.Sprintf("%s.%s.id", from.kind, from.label)},
+			{"from_connector", strconv.FormatInt(it.Connects.From.Connector, 10)},
+			{"to_id", fmt.Sprintf("%s.%s.id", to.kind, to.label)},
+			{"to_connector", strconv.FormatInt(it.Connects.To.Connector, 10)},
+		})
 	}
 
 	if len(res.Skipped) > 0 {
-		b.WriteString("\n# Not exported - these are defined by what they connect, not where they\n")
-		b.WriteString("# are, and the connection graph is not part of world enumeration yet:\n")
+		b.WriteString("\n# Not exported. A belt or wire is defined by the two connectors it\n")
+		b.WriteString("# joins, so one is only exportable when both ends are inside the\n")
+		b.WriteString("# region and the game reported both connector indices:\n")
 		classes := make([]string, 0, len(res.Skipped))
 		for c := range res.Skipped {
 			classes = append(classes, c)

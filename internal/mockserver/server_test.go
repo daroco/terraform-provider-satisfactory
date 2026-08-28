@@ -688,3 +688,100 @@ func TestPlayers(t *testing.T) {
 		t.Errorf("players = %+v, want empty", got)
 	}
 }
+
+// A belt names the two buildables it joins by their index in the same
+// response, so those indices have to be translated from whatever the mock
+// stores into the positions the caller actually receives.
+func TestWorldBuildablesReportsConnectionGraph(t *testing.T) {
+	c := seededServer(t)
+	items, err := c.ListWorldBuildables(context.Background(), 400, 400, 20200, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var belt *api.WorldBuildable
+	for i := range items {
+		if items[i].Class == "Build_ConveyorBeltMk1_C" {
+			belt = &items[i]
+		}
+	}
+	if belt == nil {
+		t.Fatal("belt missing from the world listing")
+	}
+	if belt.Connects == nil {
+		t.Fatal("belt has no connection graph; an exporter cannot rebuild it")
+	}
+	from, to := belt.Connects.From, belt.Connects.To
+	if from.Index < 0 || int(from.Index) >= len(items) || to.Index < 0 || int(to.Index) >= len(items) {
+		t.Fatalf("connection indices %d/%d are outside the response of %d items", from.Index, to.Index, len(items))
+	}
+	if got := items[from.Index].Class; got != "Build_SmelterMk1_C" {
+		t.Errorf("from index points at %s, want the smelter", got)
+	}
+	if got := items[to.Index].Class; got != "Build_ConstructorMk1_C" {
+		t.Errorf("to index points at %s, want the constructor", got)
+	}
+	if from.Connector != 1 || to.Connector != 0 {
+		t.Errorf("connectors = %d/%d, want 1/0", from.Connector, to.Connector)
+	}
+}
+
+// Half a connection is worse than none: re-created, it would wire whatever
+// happens to sit at that index.
+func TestWorldBuildablesDropsConnectionsWithAnEndOutsideTheRadius(t *testing.T) {
+	c := seededServer(t)
+	// Centred on the belt, tight enough to exclude the constructor at y=1000.
+	items, err := c.ListWorldBuildables(context.Background(), 200, 600, 20200, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Class == "Build_ConveyorBeltMk1_C" && it.Connects != nil {
+			t.Errorf("belt kept a connection whose far end was filtered out: %+v", it.Connects)
+		}
+	}
+}
+
+// Belts Terraform created are buildables in the world too, and an exporter
+// that could not see them would report a factory with no belts in it.
+func TestWorldBuildablesIncludesTrackedConnections(t *testing.T) {
+	c := seededServer(t)
+	ctx := context.Background()
+
+	for _, b := range []api.Buildable{
+		{TFID: "tf-smelter", Class: "Build_SmelterMk1_C", Transform: api.Transform{X: 5000, Y: 0, Z: 20200}, Recipe: "Recipe_IngotIron_C"},
+		{TFID: "tf-constructor", Class: "Build_ConstructorMk1_C", Transform: api.Transform{X: 5000, Y: 800, Z: 20200}, Recipe: "Recipe_IronPlate_C"},
+	} {
+		if _, err := c.CreateBuildable(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := c.CreateConnection(ctx, api.Connection{
+		TFID:  "tf-belt",
+		Class: "Build_ConveyorBeltMk1_C",
+		From:  api.ConnectionEndpoint{BuildableTFID: "tf-smelter", Connector: 1},
+		To:    api.ConnectionEndpoint{BuildableTFID: "tf-constructor", Connector: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := c.ListWorldBuildables(ctx, 5000, 400, 20200, 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var belt *api.WorldBuildable
+	for i := range items {
+		if items[i].TFID == "tf-belt" {
+			belt = &items[i]
+		}
+	}
+	if belt == nil {
+		t.Fatal("a belt Terraform created is missing from the world listing")
+	}
+	if belt.Connects == nil {
+		t.Fatal("tracked belt has no connection graph")
+	}
+	if items[belt.Connects.From.Index].TFID != "tf-smelter" || items[belt.Connects.To.Index].TFID != "tf-constructor" {
+		t.Errorf("connection points at the wrong buildables: %+v", belt.Connects)
+	}
+}
