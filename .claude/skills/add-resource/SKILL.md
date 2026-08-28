@@ -62,9 +62,15 @@ in this order:
    code.
 8. Update `examples/` and README's resource list if user-facing.
 
-Definition of done: `go build ./... && go vet ./... && go test ./...` clean,
-acceptance tests green, spec/mock/client/provider all agree, and the example
-still applies (see the `mock-stack` skill).
+Definition of done: **`make`** clean (that is `fmt lint test` - the default
+target), acceptance tests green, spec/mock/client/provider all agree, and the
+example still applies (see the `mock-stack` skill).
+
+Run `make lint`, not just `go build/vet/test`. CI runs golangci-lint and it
+catches things the compiler and `vet` do not - a dead helper left behind by a
+refactor failed the merge gate this way, while all three of build, vet and
+test were green locally. Being locally green is not the same as being
+mergeable.
 
 **Green CI is not done for anything the mod implements.** The mock cannot
 reproduce the game's own behaviour - synchronous lightweight conversion,
