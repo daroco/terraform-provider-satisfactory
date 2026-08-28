@@ -192,7 +192,15 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Invalid:
-      description: Unknown class/recipe, bad transform, or invalid connector reference.
+      description: >
+        Unknown class/recipe, bad transform, invalid connector reference, or a
+        recipe the target machine cannot produce (e.g. a constructor recipe on
+        a smelter). That last case is rejected here because the game does not:
+        it accepts the pairing, reports it back, and shows it in the machine
+        UI, so the only visible symptom is a factory that silently never
+        produces. Recipes whose producers cannot be determined are allowed
+        through - a wrong rejection breaks a legitimate apply, a wrong
+        acceptance only yields an idle machine.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

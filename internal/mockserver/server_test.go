@@ -239,17 +239,28 @@ func TestBuildableManufacturerFidelity(t *testing.T) {
 		t.Errorf("manufacturer ClockSpeed default = %v, want 1.0", smelter.ClockSpeed)
 	}
 
-	// Non-manufacturer: requested recipe/clock are ignored, not stored -
-	// exactly what the real mod's Cast<AFGBuildableManufacturer> miss does.
+	// Non-manufacturer with a clock but no recipe: clock is ignored, not
+	// stored. clock_speed MUST stay silently ignored rather than 422 - the
+	// provider defaults it to 1.0 on every building create (see
+	// resource_building.go), so every merger and splitter sends one, and
+	// rejecting it would fail every such apply.
 	merger, err := c.CreateBuildable(ctx, api.Buildable{
-		TFID: "att-1", Class: "Build_ConveyorAttachmentMerger_C",
-		Recipe: "Recipe_IronPlate_C", ClockSpeed: 1.5,
+		TFID: "att-1", Class: "Build_ConveyorAttachmentMerger_C", ClockSpeed: 1.5,
 	})
 	if err != nil {
 		t.Fatalf("create non-manufacturer: %v", err)
 	}
 	if merger.ClockSpeed != 0 || merger.Recipe != "" {
 		t.Errorf("non-manufacturer echoed recipe=%q clock=%v, want both omitted (zero)", merger.Recipe, merger.ClockSpeed)
+	}
+
+	// A recipe, by contrast, is only ever sent when someone explicitly asked
+	// for it, so an impossible one is a config error worth surfacing rather
+	// than discarding - see TestRecipeMustFitMachine.
+	if _, err := c.CreateBuildable(ctx, api.Buildable{
+		TFID: "att-2", Class: "Build_ConveyorAttachmentMerger_C", Recipe: "Recipe_IronPlate_C",
+	}); err == nil {
+		t.Error("a recipe on a non-manufacturer should be refused, not silently dropped")
 	}
 
 	clock := 2.0
@@ -468,5 +479,47 @@ func TestGetBuildableClass(t *testing.T) {
 	// Not a buildable class name at all.
 	if _, err := c.GetBuildableClass(ctx, "Recipe_IronPlate_C"); !client.IsNotFound(err) {
 		t.Errorf("non-buildable class should 404, got %v", err)
+	}
+}
+
+// TestRecipeMustFitMachine pins the compatibility rule. Confirmed live: the
+// game accepts a recipe its machine cannot produce (a smelter set to
+// Recipe_IronPlate_C), reports it back on GET, and even displays it in the
+// machine UI - so nothing surfaces the mistake. Terraform sees zero drift on
+// a factory that can never produce anything, which is why this is rejected at
+// the API rather than left to the game.
+func TestRecipeMustFitMachine(t *testing.T) {
+	c := newTestClient(t)
+	ctx := context.Background()
+
+	ok := api.Buildable{TFID: "m-ok", Class: "Build_SmelterMk1_C", Recipe: "Recipe_IngotIron_C"}
+	if _, err := c.CreateBuildable(ctx, ok); err != nil {
+		t.Fatalf("a smelter recipe on a smelter must be accepted: %v", err)
+	}
+
+	bad := api.Buildable{TFID: "m-bad", Class: "Build_SmelterMk1_C", Recipe: "Recipe_IronPlate_C"}
+	if _, err := c.CreateBuildable(ctx, bad); err == nil {
+		t.Error("a constructor recipe on a smelter must be refused at create")
+	}
+
+	// The same broken state was reachable through PATCH, so it is checked too.
+	plate := "Recipe_IronPlate_C"
+	if _, err := c.PatchBuildable(ctx, "m-ok", api.BuildablePatch{Recipe: &plate}); err == nil {
+		t.Error("a constructor recipe on a smelter must be refused at patch")
+	}
+	// ...and the machine must be left as it was, not half-updated.
+	after, err := c.GetBuildable(ctx, "m-ok")
+	if err != nil {
+		t.Fatalf("get after refused patch: %v", err)
+	}
+	if after.Recipe != "Recipe_IngotIron_C" {
+		t.Errorf("refused patch changed the recipe to %q", after.Recipe)
+	}
+
+	// Fails open on recipes with no known producer: a wrong rejection breaks a
+	// legitimate apply, a wrong acceptance only yields an idle machine.
+	unknown := api.Buildable{TFID: "m-unknown", Class: "Build_SmelterMk1_C", Recipe: "Recipe_SomeModdedThing_C"}
+	if _, err := c.CreateBuildable(ctx, unknown); err != nil {
+		t.Errorf("an unrecognised recipe should be allowed through, got %v", err)
 	}
 }
