@@ -57,9 +57,10 @@ in this order:
    `TF_ACC=1 go test ./internal/provider/ -v`.
 7. **`Source/...` in the SatisfactoryTerraform mod repo** — implement the real thing in C++ (or leave a
    `TODO(Mn)` marker with a concrete implementation sketch if the milestone
-   isn't there yet). Remember: this cannot be compiled in the cloud dev
-   environment, so keep C++ changes minimal and pattern-matched to existing
-   code.
+   isn't there yet). Compile it before pushing if the machine has the modding
+   project set up - the `live-verify` skill in the mod repo has the loop, and
+   it is seconds rather than a 22-minute CI round trip. Where it cannot be
+   compiled, keep C++ changes minimal and pattern-matched to existing code.
 8. Update `examples/` and README's resource list if user-facing.
 
 Definition of done: **`make`** clean (that is `fmt lint test` - the default
@@ -82,3 +83,27 @@ reproduce the game's own behaviour - synchronous lightweight conversion,
 recycled instance slots, transform quantization - and each of those hid a real
 bug behind a green suite. Contract changes need a live pass against a running
 session; see the `live-verify` skill in the mod repo.
+
+## Tests that can actually fail
+
+Write the test, then break the code and watch it fail. This is not ceremony;
+two tests in this repo passed against deliberately broken implementations:
+
+- **Degenerate fixtures turn mappings into the identity function.** A test of
+  index translation seeded a world with nothing tracked, where the stored index
+  *equalled* the response index. Replacing the lookup with the raw value kept it
+  green. The fix was a fixture where the two differ - offset the world first.
+- **A test can assert the absence of something for the wrong reason.** One
+  asserted an unmapped class is not emitted as a connection, but the class it
+  used was not treated as a connection at all, so it never reached the branch
+  it was named after.
+
+For anything that *generates* configuration, the only convincing test is a
+round trip: generate it, apply it, and require an empty plan afterwards - and
+apply it somewhere other than where it came from, or you are only testing that
+absolute coordinates survive being copied. CI does this for the exporter.
+
+When two lists have to agree (a class is a connection / this resource rebuilds
+it), assert that with a test over one of the lists. Otherwise adding an entry
+to one and forgetting the other fails silently, which is how pipelines got
+dropped from every export.
