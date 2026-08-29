@@ -830,3 +830,28 @@ func TestWorldBuildablesRemapsConnectionIndicesWhenOffset(t *testing.T) {
 			belt.Connects.From.Index, belt.Connects.To.Index)
 	}
 }
+
+// The catalog must cover every mechanism the mod can report, or the coverage
+// report's branches go untested against the mock.
+func TestListClassesCoversEveryMechanism(t *testing.T) {
+	c := newTestClient(t)
+	classes, err := c.ListClasses(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, cl := range classes {
+		seen[cl.Mechanism] = true
+		if cl.Supported && cl.Resource == "" {
+			t.Errorf("%s is supported but names no resource", cl.Class)
+		}
+		if !cl.Supported && cl.WhyUnsupported == "" {
+			t.Errorf("%s is unsupported but gives no reason", cl.Class)
+		}
+	}
+	for _, m := range []string{"foundation", "building", "belt", "power_line", "pipeline", "hypertube", "node_bound", "rail_track", "rail"} {
+		if !seen[m] {
+			t.Errorf("mechanism %q missing from the sample catalog", m)
+		}
+	}
+}

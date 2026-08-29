@@ -96,6 +96,27 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Player" }
+  /classes:
+    get:
+      summary: Every buildable class the game ships, classified by how it must be placed
+      description: >
+        Read from the asset registry and each class's default object; nothing
+        is spawned. The first call loads every buildable class and takes the
+        mod a few seconds; the result is cached for the session.
+
+
+        This is how "Terraform can place everything" is measured rather than
+        asserted. Each entry names the resource that places it, or the
+        mechanism it is waiting on - node binding, spline routing, rail
+        attachment - so the gaps aggregate into a handful of problems.
+      responses:
+        "200":
+          description: The catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ClassInfo" }
   /classes/{class}:
     get:
       summary: Static, spawn-free facts about a buildable class
@@ -261,6 +282,30 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    ClassInfo:
+      type: object
+      required: [class, display_name, mechanism, supported]
+      properties:
+        class: { type: string }
+        display_name: { type: string }
+        mechanism:
+          type: string
+          description: >
+            foundation, building, belt, power_line, pipeline, hypertube for
+            supported classes; node_bound, spline, rail_track, rail for the
+            rest. Not a closed set - the mod may add mechanisms.
+        supported: { type: boolean }
+        resource:
+          type: string
+          description: Terraform resource type that places this class. Absent when unsupported.
+        why_unsupported:
+          type: string
+          description: What the mechanism needs, for classes with no resource.
+        settings_not_modelled:
+          type: string
+          description: >
+            State the contract cannot express for a class it can place -
+            Terraform can put it down but not configure it.
     BuildableClass:
       type: object
       required: [class, clearance]

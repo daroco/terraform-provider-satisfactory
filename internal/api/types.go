@@ -131,3 +131,21 @@ type Player struct {
 	Location Vec3    `json:"location"`
 	Yaw      float64 `json:"yaw"`
 }
+
+// ClassInfo is one entry from GET /classes: a buildable class the game ships,
+// classified by the mechanism the provider needs in order to place it.
+type ClassInfo struct {
+	Class       string `json:"class"`
+	DisplayName string `json:"display_name"`
+	// Mechanism groups classes by what placing them requires. Supported ones
+	// name a resource; the rest name an engineering gap, and it is the gaps
+	// that the coverage report is for.
+	Mechanism string `json:"mechanism"`
+	Supported bool   `json:"supported"`
+	Resource  string `json:"resource,omitempty"`
+	// WhyUnsupported explains the mechanism for classes with no Resource.
+	WhyUnsupported string `json:"why_unsupported,omitempty"`
+	// SettingsNotModelled names state the contract cannot express for a class
+	// it can otherwise place - Terraform can put it down but not configure it.
+	SettingsNotModelled string `json:"settings_not_modelled,omitempty"`
+}

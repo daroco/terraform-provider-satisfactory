@@ -60,6 +60,15 @@ func (c *Client) Health(ctx context.Context) error {
 // GetBuildableClass reads static, spawn-free facts about a buildable class
 // (its clearance footprint). Nothing is placed and no save is touched, so this
 // is safe to call during plan.
+// ListClasses reads the game's whole buildable-class catalog, classified by
+// how each class has to be placed. The first call is slow on the mod's side
+// (it loads every class); callers should allow well over the default timeout.
+func (c *Client) ListClasses(ctx context.Context) ([]api.ClassInfo, error) {
+	var out []api.ClassInfo
+	err := c.do(ctx, http.MethodGet, "/classes", nil, &out)
+	return out, err
+}
+
 func (c *Client) GetBuildableClass(ctx context.Context, class string) (api.BuildableClass, error) {
 	var out api.BuildableClass
 	err := c.do(ctx, http.MethodGet, "/classes/"+url.PathEscape(class), nil, &out)
