@@ -56,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 		})
 	}))
 
+	mux.HandleFunc("GET /api/v1/classes", s.auth(s.listClasses))
 	mux.HandleFunc("GET /api/v1/classes/{class}", s.auth(s.getBuildableClass))
 	mux.HandleFunc("GET /api/v1/world/buildables", s.auth(s.listWorldBuildables))
 	mux.HandleFunc("GET /api/v1/players", s.auth(s.listPlayers))

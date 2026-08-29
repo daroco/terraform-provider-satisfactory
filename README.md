@@ -57,6 +57,7 @@ built around — see **[docs/design/lifecycle.md](docs/design/lifecycle.md)**.
 | `internal/client`, `internal/api` | API client + shared wire types |
 | `internal/mockserver`, `cmd/mockserver` | In-memory mock of the mod API |
 | `internal/export`, `cmd/satisfactory-export` | Turns a live region into shareable HCL |
+| `internal/coverage`, `cmd/satisfactory-coverage` | How much of the game the provider can place, and what blocks the rest |
 | `examples/factory-hub` | Hub-and-spoke layout (merger/splitter star topology) |
 | `examples/iron-plate-line` | Minimal working example config |
 | `examples/factory-floor` | Range/grid placement example (`modules/grid-2d`) |
@@ -162,6 +163,30 @@ no space, and a config that depends on a size will fail loudly rather than
 silently stack things. The provider does not enforce clearance: placing through
 the API deliberately bypasses the game's placement rules, so overlapping is
 allowed and this data is advisory.
+
+## How much of the game can it place?
+
+The goal is every placeable item. That is measured, not asserted:
+
+```sh
+go build -o satisfactory-coverage ./cmd/satisfactory-coverage
+./satisfactory-coverage            # against a running game
+```
+
+```
+312 placeable classes in the game; the provider can place 241 (77%).
+
+Not yet: 71 classes, in 3 mechanisms
+  node_bound     23  placed on a resource node or geyser, not at a coordinate; ...
+  rail_track      4  a spline network with switches and signals bound to ...
+```
+
+The catalog comes from the game's own asset registry via `GET /classes`, so the
+numbers cannot drift from what the game ships. Every missing class names the
+mechanism it is waiting on, so a few hundred gaps collapse into a handful of
+engineering problems, ordered by how many classes each one unblocks. Classes
+Terraform can place but not configure (signs, smart splitters, switches) are
+listed separately - it can put those down, it cannot make them do anything.
 
 ## Exporting what you built by hand
 
