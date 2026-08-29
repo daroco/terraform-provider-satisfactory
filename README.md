@@ -67,6 +67,12 @@ built around — see **[docs/design/lifecycle.md](docs/design/lifecycle.md)**.
 - `satisfactory_building` — machines; `recipe` and `clock_speed` update in place
 - `satisfactory_belt` — conveyor between two factory connectors
 - `satisfactory_power_line` — wire between two power connectors
+- `satisfactory_pipeline` — fluid pipe between two pipe connectors
+- `satisfactory_hypertube` — hypertube between two hypertube connectors
+
+All four connection resources share one API shape — two buildables, two
+connector indices — and the game decides from the `class` which kind of
+connector each end must be.
 
 `class`/`recipe` attributes take the game's own class names
 (`Build_ConstructorMk1_C`, `Recipe_IronPlate_C`, ...). They are validated by

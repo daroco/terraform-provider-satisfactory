@@ -85,6 +85,8 @@ func (p *satisfactoryProvider) Resources(_ context.Context) []func() resource.Re
 		newBuildingResource,
 		newBeltResource,
 		newPowerLineResource,
+		newPipelineResource,
+		newHypertubeResource,
 	}
 }
 

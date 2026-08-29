@@ -177,15 +177,19 @@ func TestGenerateSkipsConnectionsWithUnresolvableEnds(t *testing.T) {
 	}
 }
 
-func TestGenerateSkipsConnectionTypesWithNoResource(t *testing.T) {
-	items := connected()
-	items[2].Class = "Build_Pipeline_C" // no provider resource for pipes yet
-	res := Generate(items, Options{})
-	if strings.Contains(res.HCL, "Build_Pipeline_C\"\n") {
-		t.Errorf("pipelines have no resource type and must not be emitted:\n%s", res.HCL)
-	}
-	if res.Skipped["Build_Pipeline_C"] != 1 {
-		t.Errorf("Skipped = %v", res.Skipped)
+// Every class recognised as a connection must map to a resource that can
+// rebuild it. The two lists are separate, so adding a prefix to one and
+// forgetting the other would silently drop that connection from every export -
+// which is exactly what used to happen to pipelines.
+func TestEveryConnectionClassHasAResourceType(t *testing.T) {
+	for _, prefix := range connectionClassPrefixes {
+		class := prefix + "Mk1_C"
+		if !isConnectionClass(class) {
+			t.Errorf("%s is not recognised as a connection", class)
+		}
+		if got := connectionResourceType(class); got == "" {
+			t.Errorf("%s is treated as a connection but has no resource type to rebuild it", class)
+		}
 	}
 }
 
