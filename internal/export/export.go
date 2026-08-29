@@ -42,7 +42,7 @@ type Result struct {
 // that applies cleanly and builds a factory that does not run.
 var connectionClassPrefixes = []string{
 	"Build_ConveyorBelt", "Build_ConveyorLift", "Build_PowerLine",
-	"Build_Pipeline", "Build_PipelineMK2", "Build_PipeHyper",
+	"Build_Pipeline", "Build_PipeHyper", // MK2 pipelines share the Build_Pipeline prefix
 }
 
 func isConnectionClass(class string) bool {
@@ -54,16 +54,20 @@ func isConnectionClass(class string) bool {
 	return false
 }
 
-// connectionResourceType maps a belt or wire class to the resource that can
-// rebuild it, or "" for connections the provider has no resource for yet
-// (pipelines and hypertubes). Exporting one of those as a positional
-// resource would produce configuration that applies and does nothing.
+// connectionResourceType maps a connection class to the resource that can
+// rebuild it, or "" for anything the provider has no resource for. Exporting
+// an unmapped connection as a positional resource would produce configuration
+// that applies and does nothing.
 func connectionResourceType(class string) string {
 	switch {
 	case strings.HasPrefix(class, "Build_ConveyorBelt"), strings.HasPrefix(class, "Build_ConveyorLift"):
 		return "satisfactory_belt"
 	case strings.HasPrefix(class, "Build_PowerLine"):
 		return "satisfactory_power_line"
+	case strings.HasPrefix(class, "Build_PipeHyper"):
+		return "satisfactory_hypertube"
+	case strings.HasPrefix(class, "Build_Pipeline"):
+		return "satisfactory_pipeline"
 	default:
 		return ""
 	}
@@ -235,9 +239,11 @@ func Generate(items []api.WorldBuildable, opts Options) Result {
 			to, okTo = byIndex[it.Connects.To.Index]
 		}
 		if kind == "" || !okFrom || !okTo {
-			// Either the mod could not resolve both ends (one lay outside the
-			// exported radius), or this is something with no resource type
-			// yet, like a pipeline. Naming it in a comment beats emitting a
+			// Almost always: the mod could not resolve both ends, because one
+			// lay outside the exported radius. The kind == "" case is a guard
+			// against connectionClassPrefixes and connectionResourceType
+			// drifting apart (TestEveryConnectionClassHasAResourceType keeps
+			// them together). Naming it in a comment beats emitting a
 			// connection to nowhere.
 			res.Skipped[it.Class]++
 			continue

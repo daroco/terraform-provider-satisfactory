@@ -198,6 +198,21 @@ resource "satisfactory_power_line" "power" {
   to_id          = satisfactory_building.constructor.id
   to_connector   = 0
 }
+
+resource "satisfactory_pipeline" "fluid" {
+  class          = "Build_Pipeline_C"
+  from_id        = satisfactory_building.smelter.id
+  from_connector = 0
+  to_id          = satisfactory_building.constructor.id
+  to_connector   = 0
+}
+
+resource "satisfactory_hypertube" "tube" {
+  from_id        = satisfactory_building.smelter.id
+  from_connector = 0
+  to_id          = satisfactory_building.constructor.id
+  to_connector   = 0
+}
 `
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoFactories,
@@ -211,6 +226,10 @@ resource "satisfactory_power_line" "power" {
 						"satisfactory_belt.smelter_to_constructor", "from_id",
 						"satisfactory_building.smelter", "id",
 					),
+					// Pipelines take an explicit class; hypertubes default
+					// theirs, like power lines.
+					resource.TestCheckResourceAttrSet("satisfactory_pipeline.fluid", "id"),
+					resource.TestCheckResourceAttr("satisfactory_hypertube.tube", "class", "Build_PipeHyper_C"),
 				),
 			},
 			{

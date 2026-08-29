@@ -17,12 +17,13 @@ import (
 	"github.com/daroco/terraform-provider-satisfactory/internal/client"
 )
 
-// connectionResource implements both satisfactory_belt and
-// satisfactory_power_line: the API shape is identical, only the buildable
-// class differs (conveyor marks vs. Build_PowerLine_C).
+// connectionResource implements every "join two connectors" resource - belts,
+// power lines, pipelines and hypertubes. The API shape is identical for all of
+// them; only the buildable class differs, and the game decides from that class
+// which kind of connector each end has to be.
 type connectionResource struct {
 	client       *client.Client
-	suffix       string // "_belt" or "_power_line"
+	suffix       string // "_belt", "_power_line", "_pipeline", "_hypertube"
 	description  string
 	classDesc    string
 	defaultClass string // "" means class is required
@@ -42,6 +43,23 @@ func newPowerLineResource() resource.Resource {
 		description:  "A power line between two power connectors.",
 		classDesc:    "Wire class; defaults to Build_PowerLine_C.",
 		defaultClass: "Build_PowerLine_C",
+	}
+}
+
+func newPipelineResource() resource.Resource {
+	return &connectionResource{
+		suffix:      "_pipeline",
+		description: "A fluid pipeline between two pipe connectors.",
+		classDesc:   "Pipeline class, e.g. Build_Pipeline_C or Build_PipelineMK2_C.",
+	}
+}
+
+func newHypertubeResource() resource.Resource {
+	return &connectionResource{
+		suffix:       "_hypertube",
+		description:  "A hypertube between two hypertube connectors.",
+		classDesc:    "Hypertube class; defaults to Build_PipeHyper_C.",
+		defaultClass: "Build_PipeHyper_C",
 	}
 }
 

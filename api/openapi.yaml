@@ -426,6 +426,12 @@ components:
         tf_id: { type: string }
         class:
           type: string
-          description: Build_ConveyorBeltMk1_C .. Mk6, or Build_PowerLine_C.
+          description: >
+            The buildable class to place between the two endpoints, e.g.
+            Build_ConveyorBeltMk1_C, Build_PowerLine_C, Build_Pipeline_C or
+            Build_PipeHyper_C. The class determines which kind of connector
+            each end must be (factory, power, pipe or hypertube); connector
+            indices are per-kind, so index 0 of a machine's power connectors
+            is unrelated to index 0 of its fluid connectors.
         from: { $ref: "#/components/schemas/ConnectionEndpoint" }
         to: { $ref: "#/components/schemas/ConnectionEndpoint" }
