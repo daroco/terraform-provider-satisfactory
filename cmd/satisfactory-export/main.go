@@ -37,6 +37,7 @@ func run() error {
 		atPlayer = flag.Bool("at-player", false, "centre on the first connected player instead of -x/-y/-z")
 		out      = flag.String("out", "-", "file to write, or - for stdout")
 		name     = flag.String("name", "", "name for the generated config's header comment")
+		check    = flag.Bool("check", false, "inspect what the mod reports and flag anything that cannot be right, instead of writing config")
 	)
 	flag.Parse()
 
@@ -64,6 +65,30 @@ func run() error {
 	}
 	if len(items) == 0 {
 		return fmt.Errorf("nothing within %.0f cm of (%.0f, %.0f, %.0f)", *radius, center.X, center.Y, center.Z)
+	}
+
+	if *check {
+		// Deliberately not "did it return 200": the mock returns 200 for
+		// everything and cannot model lightweight buildables or connectors at
+		// all. These checks know what a real factory has to look like.
+		playersForCheck, err := c.ListPlayers(ctx)
+		if err != nil {
+			return fmt.Errorf("listing players: %w", err)
+		}
+		findings := export.Check(items, playersForCheck)
+		for _, f := range findings {
+			fmt.Printf("%-5s %s\n", f.Level, f.Message)
+			if f.Detail != "" {
+				fmt.Printf("      %s\n", f.Detail)
+			}
+		}
+		if export.Failed(findings) {
+			return fmt.Errorf("the live world listing is not self-consistent (see FAIL above)")
+		}
+		fmt.Println()
+		fmt.Println("Note what this still does not prove: that applying a generated file")
+		fmt.Println("rebuilds a factory that runs. For that, apply one at a clear origin and look.")
+		return nil
 	}
 
 	res := export.Generate(items, export.Options{Origin: center, ModuleName: *name})

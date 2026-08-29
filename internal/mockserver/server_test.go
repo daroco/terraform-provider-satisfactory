@@ -785,3 +785,48 @@ func TestWorldBuildablesIncludesTrackedConnections(t *testing.T) {
 		t.Errorf("connection points at the wrong buildables: %+v", belt.Connects)
 	}
 }
+
+// With nothing tracked, a seeded belt's stored indices happen to equal its
+// response indices - so a test on the seeded world alone passes whether or not
+// the translation actually runs. Creating buildables first shifts everything
+// and makes the remap observable.
+func TestWorldBuildablesRemapsConnectionIndicesWhenOffset(t *testing.T) {
+	c := seededServer(t)
+	ctx := context.Background()
+
+	// Tracked buildables sort ahead of the seeded world, pushing every seeded
+	// index along by two.
+	for _, b := range []api.Buildable{
+		{TFID: "aaa-first", Class: "Build_ConstructorMk1_C", Transform: api.Transform{X: 300, Y: 300, Z: 20200}, Recipe: "Recipe_IronPlate_C"},
+		{TFID: "aab-second", Class: "Build_ConstructorMk1_C", Transform: api.Transform{X: 350, Y: 350, Z: 20200}, Recipe: "Recipe_IronPlate_C"},
+	} {
+		if _, err := c.CreateBuildable(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, err := c.ListWorldBuildables(ctx, 400, 400, 20200, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var belt *api.WorldBuildable
+	for i := range items {
+		if items[i].Class == "Build_ConveyorBeltMk1_C" && items[i].TFID == "" {
+			belt = &items[i]
+		}
+	}
+	if belt == nil || belt.Connects == nil {
+		t.Fatal("seeded belt missing or unresolved")
+	}
+	if got := items[belt.Connects.From.Index].Class; got != "Build_SmelterMk1_C" {
+		t.Errorf("from index points at %s, want the smelter - stored indices were not translated", got)
+	}
+	if got := items[belt.Connects.To.Index].Class; got != "Build_ConstructorMk1_C" {
+		t.Errorf("to index points at %s, want the constructor", got)
+	}
+	// And specifically not the raw stored values, which would now be wrong.
+	if belt.Connects.From.Index == 4 && belt.Connects.To.Index == 5 {
+		t.Errorf("indices are unchanged from the seed (%d/%d) despite two tracked buildables ahead of them",
+			belt.Connects.From.Index, belt.Connects.To.Index)
+	}
+}

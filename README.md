@@ -192,6 +192,16 @@ not just placed. Two things the exporter reports rather than guesses at:
   adoption path yet - `terraform import` for hand-built things needs the mod to
   assign tf_ids to buildables it did not place.
 
+Against a real game, `-check` inspects what the mod reports and flags anything
+that cannot be right - endpoints pointing outside the response, belts that
+resolved no connections, or a region with no lightweight buildables in it
+(foundations are lightweight instances, so an enumeration bug there returns a
+factory with no floor and looks healthy doing it):
+
+```sh
+./satisfactory-export -at-player -radius 5000 -check
+```
+
 To try it without the game, seed the mock with a small hand-built factory:
 
 ```sh
