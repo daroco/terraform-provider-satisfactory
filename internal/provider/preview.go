@@ -69,13 +69,16 @@ func previewPlacement(ctx context.Context, c *client.Client, what string, p api.
 		)
 		return
 	}
-	// A hologram validates on request and reports "initializing" until it
-	// has ticked once (seen live). The game thread handles the next request
-	// on a later tick, so one read-back settles it.
-	if slices.Contains(res.Disqualifiers, initializingDisqualifier) {
-		if again, err := c.GetPreview(ctx, p.TFID); err == nil {
-			res = again
+	// A hologram validates on request and reports "initializing" until the
+	// game has updated it at least once more (seen live). Each read-back
+	// drives it again on a later game tick, so a few settle it; a hologram
+	// that never settles is reported as it stands.
+	for i := 0; i < 3 && slices.Contains(res.Disqualifiers, initializingDisqualifier); i++ {
+		again, err := c.GetPreview(ctx, p.TFID)
+		if err != nil {
+			break
 		}
+		res = again
 	}
 	if res.Valid == nil {
 		diags.AddWarning(
