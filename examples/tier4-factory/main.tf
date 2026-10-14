@@ -33,8 +33,8 @@ provider "satisfactory" {
 
 variable "anchor" {
   type        = object({ x = number, y = number, z = number })
-  description = "Where the factory floor starts, in centimetres; also the point nodes are picked nearest to. Default: a flat spot at the Grasslands start."
-  default     = { x = -77737, y = 220338, z = -337 }
+  description = "Where the factory floor starts (its south-west corner), in centimetres; also the point nodes are picked nearest to. The floor runs about 180 m east and 540 m north of it. Default: open ground east of the Grasslands HUB, clear of examples/factory-hub and of the lake the coal plant uses."
+  default     = { x = -74000, y = 224000, z = -337 }
 }
 
 variable "floor" {

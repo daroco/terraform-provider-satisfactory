@@ -10,6 +10,13 @@ with `satisfactory_resource_nodes`, nearest `var.anchor` first; the floor is
 laid out relative to the anchor; the coal plant relative to the lake it
 found. Move the anchor and everything follows.
 
+The anchor is the floor's south-west corner and the floor is big: two
+columns, about 180 m east by 540 m north. The default sits on open ground
+east of the Grasslands HUB where the terrain falls away toward the lake and
+the iron nodes, so machines placed at the anchor's height float rather than
+sink. Run a plan with `preview = true` first and fly the ghosts before you
+apply; if the ground is wrong, move the anchor.
+
 ## What it makes
 
 | Product (per minute) | Line | Machines | Clock |
