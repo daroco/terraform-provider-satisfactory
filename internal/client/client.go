@@ -138,6 +138,14 @@ func (c *Client) PreviewBuildable(ctx context.Context, p api.Preview) (api.Previ
 	return out, err
 }
 
+// GetPreview re-validates one standing hologram and returns the settled
+// verdict; *NotFoundError if it has expired.
+func (c *Client) GetPreview(ctx context.Context, tfID string) (api.PreviewResult, error) {
+	var out api.PreviewResult
+	err := c.do(ctx, http.MethodGet, "/preview/"+url.PathEscape(tfID), nil, &out)
+	return out, err
+}
+
 // ListPreviews reports the holograms still standing.
 func (c *Client) ListPreviews(ctx context.Context) ([]api.PreviewResult, error) {
 	var out []api.PreviewResult

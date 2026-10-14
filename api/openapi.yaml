@@ -388,6 +388,21 @@ paths:
   /preview/{tf_id}:
     parameters:
       - { name: tf_id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Re-validate one standing preview hologram
+      description: >
+        A hologram only runs its placement check when asked, and right after
+        spawning the answer is "FGCDInitializing" until it has ticked. The
+        POST response can therefore be provisional; this read, a tick or more
+        later, re-runs the check and is the settled verdict. The provider
+        calls it when a POST came back initializing.
+      responses:
+        "200":
+          description: The hologram, re-validated now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PreviewResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
     delete:
       summary: Remove one preview hologram
       description: Idempotent - removing a preview that already expired is a 204 too.

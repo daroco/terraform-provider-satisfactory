@@ -398,6 +398,23 @@ func (s *Server) deletePreviews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]int{"removed": n})
 }
 
+// getPreview re-reports one standing hologram. The mock's verdict never
+// changes between reads; the real mod re-runs the placement check here,
+// which is why the provider reads back after an "initializing" POST.
+func (s *Server) getPreview(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.purgeExpiredPreviews()
+	p, ok := s.previews[r.PathValue("tf_id")]
+	if !ok {
+		writeErr(w, http.StatusNotFound, "no preview with that tf_id (expired or never shown)")
+		return
+	}
+	res := p.result
+	res.ExpiresIn = int64(math.Ceil(p.expires.Sub(s.now()).Seconds()))
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (s *Server) deletePreview(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -418,3 +418,19 @@ func TestPreviewLifecycle(t *testing.T) {
 		t.Errorf("after clear, standing previews = %d, want 0", got)
 	}
 }
+
+func TestPreviewReadBack(t *testing.T) {
+	s, c := newNodeTestServer(t)
+	s.SeedResourceNodes(fixtureNodes())
+	ctx := context.Background()
+	if _, err := c.PreviewBuildable(ctx, api.Preview{TFID: "p-rb", Class: "Build_MinerMk1_C", NodeID: "n-near"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.GetPreview(ctx, "p-rb")
+	if err != nil || got.TFID != "p-rb" || got.Valid == nil || !*got.Valid || got.X != 1000 {
+		t.Errorf("read back = %+v %v, want the standing preview at its node", got, err)
+	}
+	if _, err := c.GetPreview(ctx, "nope"); !client.IsNotFound(err) {
+		t.Errorf("unknown preview should be not-found, got %v", err)
+	}
+}

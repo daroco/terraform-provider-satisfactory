@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -24,6 +25,10 @@ import (
 // The hologram's verdict is advisory. POST /buildables deliberately bypasses
 // hologram rules (clearance, floor contact, ...) because a config may want
 // exactly that; a red ghost says "look at this", not "this will fail".
+
+// initializingDisqualifier is the game's construct disqualifier for a
+// hologram that has not completed its first placement pass yet.
+const initializingDisqualifier = "FGCDInitializing"
 
 // previewKey identifies a hologram for a resource that may not have a tf_id
 // yet (a create has no id until apply). It is derived from what is being
@@ -63,6 +68,14 @@ func previewPlacement(ctx context.Context, c *client.Client, what string, p api.
 				". The plan is unaffected; set preview = false to silence this.",
 		)
 		return
+	}
+	// A hologram validates on request and reports "initializing" until it
+	// has ticked once (seen live). The game thread handles the next request
+	// on a later tick, so one read-back settles it.
+	if slices.Contains(res.Disqualifiers, initializingDisqualifier) {
+		if again, err := c.GetPreview(ctx, p.TFID); err == nil {
+			res = again
+		}
 	}
 	if res.Valid == nil {
 		diags.AddWarning(

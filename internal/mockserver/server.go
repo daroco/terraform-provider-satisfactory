@@ -85,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/preview", s.auth(s.listPreviews))
 	mux.HandleFunc("POST /api/v1/preview", s.auth(s.createPreview))
 	mux.HandleFunc("DELETE /api/v1/preview", s.auth(s.deletePreviews))
+	mux.HandleFunc("GET /api/v1/preview/{tf_id}", s.auth(s.getPreview))
 	mux.HandleFunc("DELETE /api/v1/preview/{tf_id}", s.auth(s.deletePreview))
 
 	mux.HandleFunc("GET /api/v1/buildables", s.auth(s.listBuildables))
