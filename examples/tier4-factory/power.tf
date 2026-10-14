@@ -69,6 +69,7 @@ resource "satisfactory_building" "junction" {
   x        = each.value.x
   y        = each.value.y
   z        = local.plant_att_z
+  yaw      = local.junction_conn.yaw
 }
 
 resource "satisfactory_building" "pump" {

@@ -66,18 +66,23 @@ variable "belt_class" {
 locals {
   cal = {
     # inputs on which side of the machine row at yaw 0 (+1 = +y, -1 = -y)
-    smelter     = { in = [0], out = 1, side = -1, yaw = 0, pitch = 1000 }   # in/out live; side live (output faces +y)
-    constructor = { in = [0], out = 1, side = 1, yaw = 0, pitch = 1000 }    # in live (faces +y); out assumed
-    foundry     = { in = [0, 1], out = 2, side = 1, yaw = 0, pitch = 1200 } # assumed
-    assembler   = { in = [0, 1], out = 2, side = 1, yaw = 0, pitch = 1600 } # assumed
-    coal_gen    = { in = [0], side = 1, yaw = 0, pitch = 1200 }             # assumed; belt input only
+    smelter     = { in = [0], out = 1, side = -1, yaw = 0, pitch = 1000 }    # in/out live; side live (output faces +y)
+    constructor = { in = [0], out = 1, side = 1, yaw = 0, pitch = 1000 }     # in live (faces +y); out assumed
+    foundry     = { in = [0, 1], out = 2, side = -1, yaw = 0, pitch = 1200 } # live: inputs 0 (+x half) and 1 (-x half) face -y, output 2 faces +y
+    assembler   = { in = [1, 2], out = 0, side = -1, yaw = 0, pitch = 1600 } # live: inputs 1 (+x half) and 2 (-x half) face -y, output 0 faces +y
+    coal_gen    = { in = [0], side = 1, yaw = 0, pitch = 1200 }              # assumed; belt input only
   }
-  miner_out      = 0                         # assumed: a miner has one factory connector
-  water_pipe_out = 0                         # assumed: a water extractor has one pipe connector
-  coal_gen_pipe  = 0                         # assumed: a coal generator has one pipe connector
-  junction_conn  = { in = 0, outs = [1, 2] } # assumed: Build_PipelineJunction_Cross_C has 4
-  storage        = { in = 0, yaw = 0 }       # assumed: Build_StorageContainerMk1_C input, facing -x at yaw 0
-  pole_conn      = 0                         # live: poles and machines have one power connector
+  miner_out      = 0 # assumed: a miner has one factory connector
+  water_pipe_out = 0 # live: the water extractor's only pipe connector
+  coal_gen_pipe  = 0 # live: the coal generator's only pipe connector
+  # Junction: 0 and 2 are opposite ends and 1 the side branch (live, T junction);
+  # the cross adds 3 opposite 1 (assumed). At yaw -90 connector 2 faces +y (the
+  # lake) and 1/3 face -x/+x, the two generators it serves.
+  junction_conn = { in = 2, outs = [1, 3], yaw = -90 }
+  # Storage (live): input 0 faces -y and output 1 faces +y at yaw 0. The sinks
+  # sit at the +x end of a merger chain, so yaw -90 turns the input toward it.
+  storage   = { in = 0, out = 1, yaw = -90 }
+  pole_conn = 0 # live: poles and machines have one power connector
 
   # Vertical offsets (live, examples/factory-hub): machines sit half a tile
   # above a 1 m foundation's pivot; splitters/mergers 1 m above that.
