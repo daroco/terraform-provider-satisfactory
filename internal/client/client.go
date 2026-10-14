@@ -39,7 +39,17 @@ type Client struct {
 	baseURL string
 	token   string
 	http    *http.Client
+	// preview makes the provider show pending placements as in-game
+	// holograms during plan. Off by default: plan is supposed to be free of
+	// side effects, and holograms - transient as they are - are one.
+	preview bool
 }
+
+// SetPreview turns plan-time hologram previews on or off.
+func (c *Client) SetPreview(on bool) { c.preview = on }
+
+// PreviewEnabled reports whether plan-time hologram previews are on.
+func (c *Client) PreviewEnabled() bool { return c.preview }
 
 // New returns a client for the given endpoint, e.g. "http://localhost:8090".
 func New(endpoint, token string) *Client {
@@ -87,6 +97,70 @@ func (c *Client) ListWorldBuildables(ctx context.Context, x, y, z, radius float6
 	var out []api.WorldBuildable
 	err := c.do(ctx, http.MethodGet, "/world/buildables?"+q.Encode(), nil, &out)
 	return out, err
+}
+
+// ListResourceNodes reports resource nodes, geysers and water volumes an
+// extractor can bind to, filtered and ordered per the query (see
+// api.ResourceNodeQuery). Read-only, so safe during plan.
+func (c *Client) ListResourceNodes(ctx context.Context, query api.ResourceNodeQuery) ([]api.ResourceNode, error) {
+	q := url.Values{}
+	if query.Resource != "" {
+		q.Set("resource", query.Resource)
+	}
+	if query.Purity != "" {
+		q.Set("purity", query.Purity)
+	}
+	if query.Center != nil {
+		q.Set("x", strconv.FormatFloat(query.Center.X, 'f', -1, 64))
+		q.Set("y", strconv.FormatFloat(query.Center.Y, 'f', -1, 64))
+		q.Set("z", strconv.FormatFloat(query.Center.Z, 'f', -1, 64))
+	}
+	if query.Radius != nil {
+		q.Set("radius", strconv.FormatFloat(*query.Radius, 'f', -1, 64))
+	}
+	if query.IncludeOccupied {
+		q.Set("include_occupied", "true")
+	}
+	path := "/world/resource-nodes"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out []api.ResourceNode
+	err := c.do(ctx, http.MethodGet, path, nil, &out)
+	return out, err
+}
+
+// PreviewBuildable shows a would-be buildable as an in-game hologram and
+// returns the game's verdict on its placement. Transient: nothing is built.
+func (c *Client) PreviewBuildable(ctx context.Context, p api.Preview) (api.PreviewResult, error) {
+	var out api.PreviewResult
+	err := c.do(ctx, http.MethodPost, "/preview", p, &out)
+	return out, err
+}
+
+// ListPreviews reports the holograms still standing.
+func (c *Client) ListPreviews(ctx context.Context) ([]api.PreviewResult, error) {
+	var out []api.PreviewResult
+	err := c.do(ctx, http.MethodGet, "/preview", nil, &out)
+	return out, err
+}
+
+// ClearPreview removes one hologram. Already gone is not an error.
+func (c *Client) ClearPreview(ctx context.Context, tfID string) error {
+	err := c.do(ctx, http.MethodDelete, "/preview/"+url.PathEscape(tfID), nil, nil)
+	if asNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// ClearPreviews removes every standing hologram and reports how many there were.
+func (c *Client) ClearPreviews(ctx context.Context) (int, error) {
+	var out struct {
+		Removed int `json:"removed"`
+	}
+	err := c.do(ctx, http.MethodDelete, "/preview", nil, &out)
+	return out.Removed, err
 }
 
 // ListPlayers reports connected players that have spawned in.

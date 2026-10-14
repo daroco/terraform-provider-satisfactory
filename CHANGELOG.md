@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `satisfactory_extractor` resource and `satisfactory_resource_nodes` data
+  source: miners and water extractors are placed on a world feature found by
+  querying the game, not at a coordinate. Extractors and generators now report
+  and patch `clock_speed`.
+- Plan-time holograms: with the provider's `preview` setting (or
+  `SATISFACTORY_PREVIEW=1`), every placement a plan would make is shown as a
+  hologram in the running game and the game's placement verdict becomes a plan
+  warning. Holograms are transient and are replaced by the real building on
+  apply.
+- `modules/manifold-line` and `modules/pole-chain`, and `examples/tier4-factory`:
+  a complete factory for every automatable part through Tier 4, coal-powered.
+- The exporter emits `satisfactory_extractor` for node-bound buildables.
+
 - Release tooling for the Terraform Registry: GoReleaser config, registry
   manifest (protocol 6), and a tag-triggered release workflow.
 - Generated registry documentation (`docs/`) and per-resource examples under

@@ -547,3 +547,272 @@ resource "satisfactory_building" "splitter" {
 		},
 	})
 }
+
+func TestAccExtractorLifecycle(t *testing.T) {
+	c := startMock(t)
+
+	// include_occupied + the ownership filter: once the miner stands on a
+	// node, that node must keep its place in the list or the next plan picks
+	// the next free node and replaces the miner.
+	config := `
+data "satisfactory_resource_nodes" "iron" {
+  resource         = "Desc_OreIron_C"
+  x                = -77737
+  y                = 220338
+  z                = -337
+  include_occupied = true
+}
+
+locals {
+  usable = [for n in data.satisfactory_resource_nodes.iron.nodes : n if n.purity != "impure" && (!n.occupied || n.occupant_tf_id != "")]
+}
+
+resource "satisfactory_extractor" "miner" {
+  class   = "Build_MinerMk1_C"
+  node_id = local.usable[0].id
+}
+`
+	updated := `
+data "satisfactory_resource_nodes" "iron" {
+  resource         = "Desc_OreIron_C"
+  x                = -77737
+  y                = 220338
+  z                = -337
+  include_occupied = true
+}
+
+locals {
+  usable = [for n in data.satisfactory_resource_nodes.iron.nodes : n if n.purity != "impure" && (!n.occupied || n.occupant_tf_id != "")]
+}
+
+resource "satisfactory_extractor" "miner" {
+  class       = "Build_MinerMk1_C"
+  node_id     = local.usable[0].id
+  clock_speed = 1.5
+}
+`
+	var firstID string
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("satisfactory_extractor.miner", "clock_speed", "1"),
+					resource.TestCheckResourceAttrSet("satisfactory_extractor.miner", "id"),
+					resource.TestCheckResourceAttrSet("satisfactory_extractor.miner", "x"),
+					resource.TestCheckResourceAttrSet("satisfactory_extractor.miner", "z"),
+					// Nearest non-impure iron node to the anchor in the mock geography.
+					resource.TestCheckResourceAttr("satisfactory_extractor.miner", "node_id", "Persistent_Level:PersistentLevel.BP_ResourceNode_Iron_1"),
+					captureID("satisfactory_extractor.miner", &firstID),
+				),
+			},
+			{
+				// The transform the game reported is computed state, not
+				// config: re-planning must not try to "fix" it.
+				Config:   config,
+				PlanOnly: true,
+			},
+			{
+				// Same node, only the clock changes: in place.
+				Config: updated,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("satisfactory_extractor.miner", "clock_speed", "1.5"),
+					checkSameID("satisfactory_extractor.miner", &firstID),
+				),
+			},
+			{
+				// Dismantled in-game: refresh must detect the loss.
+				PreConfig: func() {
+					if err := c.DeleteBuildable(context.Background(), firstID); err != nil {
+						t.Fatalf("out-of-band delete: %v", err)
+					}
+				},
+				Config:             updated,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+func TestAccExtractorRejectsBadNode(t *testing.T) {
+	startMock(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoFactories,
+		Steps: []resource.TestStep{
+			{
+				// A hand-built miner is already on this node.
+				Config: `
+resource "satisfactory_extractor" "miner" {
+  class   = "Build_MinerMk1_C"
+  node_id = "Persistent_Level:PersistentLevel.BP_ResourceNode_Iron_4"
+}
+`,
+				ExpectError: regexp.MustCompile(`already occupied`),
+			},
+			{
+				Config: `
+resource "satisfactory_extractor" "pump" {
+  class   = "Build_WaterPump_C"
+  node_id = "Persistent_Level:PersistentLevel.BP_ResourceNode_Iron_1"
+}
+`,
+				ExpectError: regexp.MustCompile(`cannot extract`),
+			},
+		},
+	})
+}
+
+func TestAccWaterExtractorPlacement(t *testing.T) {
+	startMock(t)
+	config := `
+data "satisfactory_resource_nodes" "water" {
+  resource = "Desc_Water_C"
+}
+
+resource "satisfactory_extractor" "pump" {
+  class   = "Build_WaterPump_C"
+  node_id = data.satisfactory_resource_nodes.water.nodes[0].id
+  x       = data.satisfactory_resource_nodes.water.nodes[0].x + 1500
+  y       = data.satisfactory_resource_nodes.water.nodes[0].y
+  yaw     = 90
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("satisfactory_extractor.pump", "x", "-74237"),
+					resource.TestCheckResourceAttr("satisfactory_extractor.pump", "yaw", "90"),
+					resource.TestCheckResourceAttr("satisfactory_extractor.pump", "z", "-340"),
+				),
+			},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}
+
+func TestAccResourceNodesDataSource(t *testing.T) {
+	startMock(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "satisfactory_resource_nodes" "coal" {
+  resource = "Desc_Coal_C"
+  purity   = "normal"
+  x        = -77737
+  y        = 220338
+  z        = -337
+  radius   = 20000
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.coal", "nodes.#", "2"),
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.coal", "nodes.0.id", "Persistent_Level:PersistentLevel.BP_ResourceNode_Coal_1"),
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.coal", "nodes.0.form", "solid"),
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.coal", "nodes.0.occupied", "false"),
+				),
+			},
+			{
+				Config: `
+data "satisfactory_resource_nodes" "bad" {
+  radius = 100
+}
+`,
+				ExpectError: regexp.MustCompile(`radius`),
+			},
+		},
+	})
+}
+
+// TestAccPreviewOnPlan turns previewing on and checks the hologram flow:
+// a plan leaves ghosts standing, apply replaces them, and a placement the
+// game would refuse surfaces as a warning rather than failing the plan.
+func TestAccPreviewOnPlan(t *testing.T) {
+	s := mockserver.New("")
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	t.Setenv("SATISFACTORY_ENDPOINT", srv.URL)
+	t.Setenv("SATISFACTORY_PREVIEW", "1")
+
+	config := `
+resource "satisfactory_foundation" "pad" {
+  class = "Build_Foundation_8x1_01_C"
+  x     = 0
+  y     = 0
+  z     = 0
+}
+
+resource "satisfactory_building" "smelter" {
+  class  = "Build_SmelterMk1_C"
+  x      = 0
+  y      = 0
+  z      = 50
+  recipe = "Recipe_IngotIron_C"
+}
+
+data "satisfactory_resource_nodes" "iron" {
+  resource         = "Desc_OreIron_C"
+  purity           = "pure"
+  include_occupied = true
+}
+
+locals {
+  iron = [for n in data.satisfactory_resource_nodes.iron.nodes : n if !n.occupied || n.occupant_tf_id != ""]
+}
+
+resource "satisfactory_extractor" "miner" {
+  class   = "Build_MinerMk1_C"
+  node_id = local.iron[0].id
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				PreConfig: func() {
+					// The plan above previewed three placements; nothing
+					// was built, so all three ghosts still stand.
+					if got := s.PreviewCount(); got != 3 {
+						t.Fatalf("after plan, %d holograms standing, want 3", got)
+					}
+				},
+				Config: config,
+			},
+			{
+				PreConfig: func() {
+					// Apply replaced each ghost with its building.
+					if got := s.PreviewCount(); got != 0 {
+						t.Fatalf("after apply, %d holograms standing, want 0", got)
+					}
+				},
+				Config:   config,
+				PlanOnly: true,
+			},
+			{
+				// A second foundation on the pad's spot: the mock's hologram
+				// flags it, the plan still succeeds (warning, not error),
+				// and apply then hits the real 409.
+				Config: config + `
+resource "satisfactory_foundation" "clash" {
+  class = "Build_Foundation_8x1_01_C"
+  x     = 0
+  y     = 0
+  z     = 0
+}
+`,
+				ExpectError: regexp.MustCompile(`already exists at that\s+position`),
+			},
+		},
+	})
+}

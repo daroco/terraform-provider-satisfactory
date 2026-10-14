@@ -8,3 +8,8 @@ provider "satisfactory" {
   # SATISFACTORY_TOKEN env var. Prefer the env var over hardcoding it.
   # token = var.satisfactory_token
 }
+
+# Show every placement a plan would make as a hologram in the running game,
+# and surface the game's placement verdict as plan warnings. Off by default;
+# also settable with SATISFACTORY_PREVIEW=1.
+# preview = true

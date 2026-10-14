@@ -175,6 +175,9 @@ func Generate(items []api.WorldBuildable, opts Options) Result {
 		if it.Lightweight {
 			kind = "satisfactory_foundation"
 		}
+		if it.NodeID != "" {
+			kind = "satisfactory_extractor"
+		}
 		base := resourceBaseName(it.Class)
 		label := fmt.Sprintf("%s_%d", base, used[base])
 		used[base]++
@@ -203,15 +206,27 @@ func Generate(items []api.WorldBuildable, opts Options) Result {
 		}
 		p := byIndex[it.Index]
 
-		dx := it.Transform.X - opts.Origin.X
-		dy := it.Transform.Y - opts.Origin.Y
-		dz := it.Transform.Z - opts.Origin.Z
-
-		attrs := [][2]string{
-			{"class", fmt.Sprintf("%q", it.Class)},
-			{"x", offset("x", dx)},
-			{"y", offset("y", dy)},
-			{"z", offset("z", dz)},
+		var attrs [][2]string
+		if it.NodeID != "" {
+			// An extractor is bound to a world feature, not placed at an
+			// offset: the node id is absolute and only meaningful on the map
+			// it came from. It is emitted as-is because that is what the
+			// extractor needs; relocating the blueprint means re-selecting
+			// nodes with satisfactory_resource_nodes.
+			attrs = [][2]string{
+				{"class", fmt.Sprintf("%q", it.Class)},
+				{"node_id", fmt.Sprintf("%q", it.NodeID)},
+			}
+		} else {
+			dx := it.Transform.X - opts.Origin.X
+			dy := it.Transform.Y - opts.Origin.Y
+			dz := it.Transform.Z - opts.Origin.Z
+			attrs = [][2]string{
+				{"class", fmt.Sprintf("%q", it.Class)},
+				{"x", offset("x", dx)},
+				{"y", offset("y", dy)},
+				{"z", offset("z", dz)},
+			}
 		}
 		if it.Transform.Yaw != 0 {
 			attrs = append(attrs, [2]string{"yaw", num(it.Transform.Yaw)})

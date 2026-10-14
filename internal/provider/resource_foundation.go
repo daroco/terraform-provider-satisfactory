@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -80,6 +81,49 @@ func (r *foundationResource) Configure(_ context.Context, req resource.Configure
 	r.client = configureClient(req, resp)
 }
 
+func (m foundationModel) transform() api.Transform {
+	return api.Transform{
+		X:   m.X.ValueFloat64(),
+		Y:   m.Y.ValueFloat64(),
+		Z:   m.Z.ValueFloat64(),
+		Yaw: m.Yaw.ValueFloat64(),
+	}
+}
+
+func (m foundationModel) toPreview() api.Preview {
+	t := m.transform()
+	return api.Preview{Class: m.Class.ValueString(), Transform: &t}
+}
+
+// ModifyPlan shows the planned foundation as a hologram when previewing is
+// on. See preview.go.
+func (r *foundationResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil || !r.client.PreviewEnabled() || req.Plan.Raw.IsNull() {
+		return
+	}
+	// Every attribute replaces, so anything with a state and a plan that
+	// reach here is either a no-op (skip) or a replace (preview).
+	var plan foundationModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Class.IsUnknown() ||
+		plan.X.IsUnknown() || plan.Y.IsUnknown() || plan.Z.IsUnknown() || plan.Yaw.IsUnknown() {
+		return
+	}
+	if !req.State.Raw.IsNull() {
+		var state foundationModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if state.Class.Equal(plan.Class) && state.X.Equal(plan.X) && state.Y.Equal(plan.Y) &&
+			state.Z.Equal(plan.Z) && state.Yaw.Equal(plan.Yaw) {
+			return
+		}
+	}
+	what := fmt.Sprintf("%s at (%g, %g, %g)", plan.Class.ValueString(), plan.X.ValueFloat64(), plan.Y.ValueFloat64(), plan.Z.ValueFloat64())
+	previewPlacement(ctx, r.client, what, plan.toPreview(), &resp.Diagnostics)
+}
+
 func (r *foundationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan foundationModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -87,15 +131,11 @@ func (r *foundationResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	plan.ID = types.StringValue(uuid.NewString())
+	clearPreview(ctx, r.client, plan.toPreview())
 	created, err := r.client.CreateBuildable(ctx, api.Buildable{
-		TFID:  plan.ID.ValueString(),
-		Class: plan.Class.ValueString(),
-		Transform: api.Transform{
-			X:   plan.X.ValueFloat64(),
-			Y:   plan.Y.ValueFloat64(),
-			Z:   plan.Z.ValueFloat64(),
-			Yaw: plan.Yaw.ValueFloat64(),
-		},
+		TFID:      plan.ID.ValueString(),
+		Class:     plan.Class.ValueString(),
+		Transform: plan.transform(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to place foundation", err.Error())

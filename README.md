@@ -66,10 +66,18 @@ built around — see **[docs/design/lifecycle.md](docs/design/lifecycle.md)**.
 
 - `satisfactory_foundation` — passive structural buildables; any change replaces
 - `satisfactory_building` — machines; `recipe` and `clock_speed` update in place
+- `satisfactory_extractor` — miners and water extractors, bound to a node or
+  water volume (`node_id`) found with the `satisfactory_resource_nodes` data
+  source; `clock_speed` updates in place
 - `satisfactory_belt` — conveyor between two factory connectors
 - `satisfactory_power_line` — wire between two power connectors
 - `satisfactory_pipeline` — fluid pipe between two pipe connectors
 - `satisfactory_hypertube` — hypertube between two hypertube connectors
+
+Data sources: `satisfactory_buildable_class` (a class's footprint) and
+`satisfactory_resource_nodes` (resource nodes, geysers and water volumes,
+sorted by distance from a point, so a config can pick "the nearest free iron
+node" without hard-coding anything).
 
 All four connection resources share one API shape — two buildables, two
 connector indices — and the game decides from the `class` which kind of

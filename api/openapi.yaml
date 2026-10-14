@@ -82,6 +82,70 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/WorldBuildable" }
         "422": { $ref: "#/components/responses/Invalid" }
+  /world/resource-nodes:
+    get:
+      summary: Resource nodes, geysers and water volumes an extractor can bind to
+      description: >
+        Read-only. Miners, water extractors and the like are not placed at a
+        coordinate; they are placed ON a world feature, so a config has to be
+        able to find one first. Each entry's id is the stable actor path of the
+        feature, which is what POST /buildables takes as node_id.
+
+
+        Only features currently loaded by the engine are reported. On a large
+        map with streaming that can exclude distant nodes, so callers that
+        need a specific far-away node should query from near it. When x/y/z
+        are given the result is sorted by ascending distance from that point
+        (ties broken by id); otherwise by id. That ordering is part of the
+        contract - a config that picks "the nearest free iron node" relies on
+        it being stable between plans.
+      parameters:
+        - name: resource
+          in: query
+          required: false
+          schema: { type: string }
+          description: Resource descriptor class to keep, e.g. Desc_OreIron_C or Desc_Water_C. Omit for all.
+        - name: purity
+          in: query
+          required: false
+          schema: { type: string, enum: [impure, normal, pure] }
+          description: Keep only nodes of this purity. Water volumes have no purity and never match a purity filter.
+        - name: x
+          in: query
+          required: false
+          schema: { type: number }
+          description: Centre to sort/filter by, in centimetres. x, y and z go together.
+        - name: y
+          in: query
+          required: false
+          schema: { type: number }
+        - name: z
+          in: query
+          required: false
+          schema: { type: number }
+        - name: radius
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+          description: Keep only features within this many centimetres of x/y/z. Requires x, y and z.
+        - name: include_occupied
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Also report features that already have an extractor on them. A
+            config that wants stable node selection across plans should set
+            this and filter on occupant_tf_id instead, so the nodes it already
+            owns keep their place in the ordering.
+      responses:
+        "200":
+          description: Matching features.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ResourceNode" }
+        "422": { $ref: "#/components/responses/Invalid" }
   /players:
     get:
       summary: Where the players are standing
@@ -151,7 +215,24 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Buildable" }
     post:
-      summary: Spawn a buildable (machine or foundation)
+      summary: Spawn a buildable (machine, foundation or extractor)
+      description: >
+        Two placement modes, chosen by the class. A coordinate-placed class
+        (everything that is not a resource extractor) requires `transform`
+        and must not carry `node_id`. An extractor class (miners, water
+        extractors, oil extractors - anything deriving from
+        AFGBuildableResourceExtractorBase) requires `node_id` and is placed
+        where the node says it goes: `transform` is ignored on input and the
+        response carries the transform it actually got. `placement` lets an
+        extractor override yaw, and for a water volume - which is an area, not
+        a point - says where on the surface to put it.
+
+
+        Mixing the modes is a 422 either way: an extractor without node_id
+        would stand on nothing and never produce, and a constructor with a
+        node_id is a config error worth surfacing. Binding to a node that
+        already has an extractor is a 409, mirroring the game, which allows
+        one extractor per node.
       requestBody:
         required: true
         content:
@@ -179,7 +260,12 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Update recipe and/or clock speed in place
-      description: Only recipe and clock_speed are mutable; anything else requires replace.
+      description: >
+        Only recipe and clock_speed are mutable; anything else requires
+        replace. `clock_speed` is accepted on any buildable whose class can
+        change potential - manufacturers, extractors and generators. `recipe`
+        is accepted on manufacturers only. A buildable with neither (a
+        splitter, a foundation) gets a 422 for any patch.
       requestBody:
         required: true
         content:
@@ -245,6 +331,68 @@ paths:
       responses:
         "204": { description: Dismantled. }
         "404": { $ref: "#/components/responses/NotFound" }
+  /preview:
+    get:
+      summary: Holograms currently standing from previous previews
+      responses:
+        "200":
+          description: Active previews, expired ones already removed.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PreviewResult" }
+    post:
+      summary: Show a would-be buildable as an in-game hologram and validate its placement
+      description: >
+        Spawns the game's own hologram for the class at the requested
+        placement - the same ghost the build gun shows - and leaves it
+        standing for ttl_seconds. Nothing is built and nothing is saved:
+        holograms are transient actors. The provider calls this during plan
+        (when previewing is enabled) so the whole pending change is visible in
+        the world before apply, and so the hologram's placement validation
+        becomes plan output.
+
+
+        The hologram runs the game's placement rules (clearance, overlap,
+        floor contact, node snapping for extractors) that POST /buildables
+        deliberately bypasses. `valid=false` therefore means "the build gun
+        would refuse this", not "the API will refuse this" - it is advisory.
+        A preview keyed by the same tf_id replaces the previous one. POST
+        /buildables with a matching tf_id removes the hologram first, so an
+        apply replaces each ghost with its real building.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Preview" }
+      responses:
+        "200":
+          description: Hologram placed (or replaced) and validated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PreviewResult" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      summary: Remove every standing preview hologram
+      responses:
+        "200":
+          description: Removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [removed]
+                properties:
+                  removed: { type: integer, description: How many holograms were standing. }
+  /preview/{tf_id}:
+    parameters:
+      - { name: tf_id, in: path, required: true, schema: { type: string } }
+    delete:
+      summary: Remove one preview hologram
+      description: Idempotent - removing a preview that already expired is a 204 too.
+      responses:
+        "204": { description: Removed, or was not standing. }
 components:
   securitySchemes:
     bearerAuth:
@@ -291,9 +439,10 @@ components:
         mechanism:
           type: string
           description: >
-            foundation, building, belt, power_line, pipeline, hypertube for
-            supported classes; node_bound, spline, rail_track, rail for the
-            rest. Not a closed set - the mod may add mechanisms.
+            foundation, building, belt, power_line, pipeline, hypertube and
+            node_bound (extractors, placed via satisfactory_extractor) for
+            supported classes; spline, rail_track, rail for the rest. Not a
+            closed set - the mod may add mechanisms.
         supported: { type: boolean }
         resource:
           type: string
@@ -369,7 +518,11 @@ components:
         yaw: { type: number, default: 0 }
     Buildable:
       type: object
-      required: [tf_id, class, transform]
+      required: [tf_id, class]
+      description: >
+        `transform` is required on input for every class except extractors,
+        and always present on output. `node_id` is required on input for
+        extractor classes and forbidden for the rest.
       properties:
         tf_id:
           type: string
@@ -378,6 +531,16 @@ components:
           type: string
           description: Game buildable class name, e.g. Build_ConstructorMk1_C or Build_Foundation_8x4_01_C.
         transform: { $ref: "#/components/schemas/Transform" }
+        node_id:
+          type: string
+          description: >
+            For extractor classes only: id of the resource node, geyser or
+            water volume to bind to, as reported by GET /world/resource-nodes.
+            Persisted by the game (the extractor remembers its node across
+            save/load), and reported back on every read.
+        placement:
+          allOf: [{ $ref: "#/components/schemas/Placement" }]
+          description: Optional overrides for node-bound placement. Ignored for coordinate-placed classes.
         recipe:
           type: string
           description: >
@@ -388,10 +551,122 @@ components:
         clock_speed:
           type: number
           description: >
-            Clock speed as a fraction (1.0 = 100%). Only present on
-            manufacturer buildables, where it defaults to 1.0 on create;
-            omitted from every response for other classes (there is no
-            universal default - a splitter simply has no clock).
+            Clock speed as a fraction (1.0 = 100%). Present on every buildable
+            whose class can change potential - manufacturers, extractors and
+            generators - where it defaults to 1.0 on create; omitted from every
+            response for other classes (there is no universal default - a
+            splitter simply has no clock).
+    Placement:
+      type: object
+      description: >
+        Where on a world feature to put an extractor. For a resource node the
+        position is fixed by the node and only yaw applies. For a water
+        volume, which is an area, x/y pick the point on the surface (must lie
+        within the volume's bounds; z is the surface); omitted, the volume's
+        centre is used.
+      properties:
+        x: { type: number }
+        y: { type: number }
+        yaw:
+          type: number
+          description: Rotation override in degrees. Omitted, the feature's own placement rotation is used.
+    ResourceNode:
+      type: object
+      required: [id, resource, form, type, occupied, x, y, z, yaw]
+      properties:
+        id:
+          type: string
+          description: Stable actor path of the feature; what POST /buildables takes as node_id.
+        resource:
+          type: string
+          description: Resource descriptor class, e.g. Desc_OreIron_C, Desc_Coal_C, Desc_Water_C.
+        purity:
+          type: string
+          enum: [impure, normal, pure, ""]
+          description: Node purity. Empty for water volumes and anything else without one.
+        form:
+          type: string
+          enum: [solid, liquid, gas, heat]
+          description: Resource form; what decides which extractor classes can bind.
+        type:
+          type: string
+          enum: [node, geyser, water, fracking, fracking_satellite]
+          description: Kind of feature. Not a closed set.
+        occupied:
+          type: boolean
+          description: True when an extractor already sits on it (built by hand or by Terraform).
+        occupant_tf_id:
+          type: string
+          description: >
+            Present when the occupying extractor is one the mod tracks. A
+            config can use it to keep selecting nodes it already owns.
+        x: { type: number }
+        y: { type: number }
+        z:
+          type: number
+          description: Feature position in centimetres. For water, the volume's centre at surface height.
+        yaw:
+          type: number
+          description: The rotation an extractor gets by default when placed here.
+        bounds_min:
+          allOf: [{ $ref: "#/components/schemas/Vec3" }]
+          description: Water volumes only - the axis-aligned box the volume occupies.
+        bounds_max:
+          allOf: [{ $ref: "#/components/schemas/Vec3" }]
+    Preview:
+      type: object
+      required: [tf_id, class]
+      description: >
+        Same placement fields as Buildable (transform for coordinate-placed
+        classes, node_id and placement for extractors), plus how long the
+        hologram should stand.
+      properties:
+        tf_id:
+          type: string
+          description: >
+            Key for this hologram. Need not be a real tf_id - the provider
+            uses a plan-local key when the resource does not exist yet - but
+            when it matches a later POST /buildables, that spawn removes the
+            hologram first.
+        class: { type: string }
+        transform: { $ref: "#/components/schemas/Transform" }
+        node_id: { type: string }
+        placement: { $ref: "#/components/schemas/Placement" }
+        ttl_seconds:
+          type: integer
+          default: 120
+          minimum: 1
+          maximum: 600
+    PreviewResult:
+      type: object
+      required: [tf_id, class, valid, disqualifiers, x, y, z, yaw]
+      properties:
+        tf_id: { type: string }
+        class: { type: string }
+        valid:
+          type: boolean
+          nullable: true
+          description: >
+            Whether the game's hologram reports the placement as
+            constructible. Null when the mod could not run the hologram's
+            validation for this class (see disqualifiers), which is not an
+            error - the preview is best-effort.
+        disqualifiers:
+          type: array
+          items: { type: string }
+          description: >
+            The game's construct-disqualifier class names (e.g.
+            CD_Overlap_C, CD_NeedsResourceNode_C) when valid is false, or
+            `preview_unavailable` when valid is null. Empty when valid.
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+        yaw:
+          type: number
+          description: Where the hologram actually settled after the game's snapping - may differ from what was asked.
+        expires_in:
+          type: integer
+          description: Seconds until the hologram is removed.
     WorldBuildable:
       type: object
       required: [index, class, transform, lightweight]
@@ -410,6 +685,9 @@ components:
             create a second one rather than adopt it.
         class: { type: string }
         transform: { $ref: "#/components/schemas/Transform" }
+        node_id:
+          type: string
+          description: For extractors, the feature they are bound to (see ResourceNode.id).
         lightweight:
           type: boolean
           description: >

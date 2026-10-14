@@ -212,3 +212,25 @@ func TestGeneratePowerLinesUseTheirOwnResource(t *testing.T) {
 		t.Errorf("power lines need satisfactory_power_line, not satisfactory_belt:\n%s", res.HCL)
 	}
 }
+
+// An extractor is bound to a node, not placed at an offset: the export has
+// to say which node, and must not invent coordinates for it.
+func TestGenerateEmitsExtractorsByNode(t *testing.T) {
+	items := append(sample(), api.WorldBuildable{
+		Index: 4, Class: "Build_MinerMk1_C", NodeID: "Persistent_Level:PersistentLevel.BP_ResourceNode_Iron_1",
+		Transform: api.Transform{X: 5000, Y: 6000, Z: 100, Yaw: 30}, ClockSpeed: 1.5,
+	})
+	res := Generate(items, Options{Origin: api.Vec3{X: 1000, Y: 2000, Z: 20000}})
+	if !strings.Contains(res.HCL, `resource "satisfactory_extractor" "minermk1_0"`) {
+		t.Errorf("extractor resource missing:\n%s", res.HCL)
+	}
+	if !hasAttr(res.HCL, "node_id", `"Persistent_Level:PersistentLevel.BP_ResourceNode_Iron_1"`) {
+		t.Errorf("node_id missing:\n%s", res.HCL)
+	}
+	if !hasAttr(res.HCL, "yaw", "30") || !hasAttr(res.HCL, "clock_speed", "1.5") {
+		t.Errorf("yaw/clock_speed missing:\n%s", res.HCL)
+	}
+	if hasAttr(res.HCL, "x", "var.origin.x + 4000") {
+		t.Errorf("an extractor must not carry coordinates:\n%s", res.HCL)
+	}
+}

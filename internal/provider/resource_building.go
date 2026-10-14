@@ -128,6 +128,39 @@ func buildingFromAPI(b api.Buildable) buildingModel {
 	}
 }
 
+func (m buildingModel) toPreview() api.Preview {
+	t := m.toAPI().Transform
+	return api.Preview{Class: m.Class.ValueString(), Transform: &t}
+}
+
+// ModifyPlan shows the planned building as a hologram when previewing is
+// on. See preview.go.
+func (r *buildingResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil || !r.client.PreviewEnabled() || req.Plan.Raw.IsNull() {
+		return
+	}
+	var plan buildingModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() || plan.Class.IsUnknown() ||
+		plan.X.IsUnknown() || plan.Y.IsUnknown() || plan.Z.IsUnknown() || plan.Yaw.IsUnknown() {
+		return
+	}
+	if !req.State.Raw.IsNull() {
+		var state buildingModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		// A recipe/clock change is in place; nothing new appears.
+		if state.Class.Equal(plan.Class) && state.X.Equal(plan.X) && state.Y.Equal(plan.Y) &&
+			state.Z.Equal(plan.Z) && state.Yaw.Equal(plan.Yaw) {
+			return
+		}
+	}
+	what := fmt.Sprintf("%s at (%g, %g, %g)", plan.Class.ValueString(), plan.X.ValueFloat64(), plan.Y.ValueFloat64(), plan.Z.ValueFloat64())
+	previewPlacement(ctx, r.client, what, plan.toPreview(), &resp.Diagnostics)
+}
+
 func (r *buildingResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan buildingModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -135,6 +168,7 @@ func (r *buildingResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 	plan.ID = types.StringValue(uuid.NewString())
+	clearPreview(ctx, r.client, plan.toPreview())
 	if plan.ClockSpeed.IsUnknown() || plan.ClockSpeed.IsNull() {
 		// No schema-level Default (see Schema) since the mod omits
 		// clock_speed entirely for non-manufacturer classes - applying

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/daroco/terraform-provider-satisfactory/internal/api"
 )
@@ -30,16 +31,35 @@ type Server struct {
 	// Terraform already owns, which is the uninteresting half of export.
 	untracked []api.WorldBuildable
 	players   []api.Player
+
+	// World features an extractor can bind to (see nodes.go). Seeded with a
+	// fixed geography so configs that select nodes apply in CI.
+	nodes map[string]*api.ResourceNode
+	// Standing preview holograms, keyed by the tf_id the caller gave.
+	previews map[string]mockPreview
+	// now is swappable so expiry can be tested without sleeping.
+	now func() time.Time
 }
 
 // New returns a mock server. token is optional; when set, every request except
 // /health must carry it as a bearer token.
 func New(token string) *Server {
-	return &Server{
+	s := &Server{
 		buildables:  map[string]api.Buildable{},
 		connections: map[string]api.Connection{},
 		token:       token,
+		previews:    map[string]mockPreview{},
+		now:         time.Now,
 	}
+	s.SeedResourceNodes(defaultResourceNodes())
+	return s
+}
+
+// SetClock replaces the mock's notion of "now" (preview expiry). Tests only.
+func (s *Server) SetClock(now func() time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.now = now
 }
 
 // Handler returns the http.Handler serving the API under /api/v1.
@@ -59,7 +79,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/classes", s.auth(s.listClasses))
 	mux.HandleFunc("GET /api/v1/classes/{class}", s.auth(s.getBuildableClass))
 	mux.HandleFunc("GET /api/v1/world/buildables", s.auth(s.listWorldBuildables))
+	mux.HandleFunc("GET /api/v1/world/resource-nodes", s.auth(s.listResourceNodes))
 	mux.HandleFunc("GET /api/v1/players", s.auth(s.listPlayers))
+
+	mux.HandleFunc("GET /api/v1/preview", s.auth(s.listPreviews))
+	mux.HandleFunc("POST /api/v1/preview", s.auth(s.createPreview))
+	mux.HandleFunc("DELETE /api/v1/preview", s.auth(s.deletePreviews))
+	mux.HandleFunc("DELETE /api/v1/preview/{tf_id}", s.auth(s.deletePreview))
 
 	mux.HandleFunc("GET /api/v1/buildables", s.auth(s.listBuildables))
 	mux.HandleFunc("POST /api/v1/buildables", s.auth(s.createBuildable))
@@ -116,7 +142,7 @@ func (s *Server) createBuildable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, b.Recipe+" cannot be produced in "+b.Class)
 		return
 	}
-	if isManufacturerClass(b.Class) {
+	if isClockableClass(b.Class) {
 		if b.ClockSpeed == 0 {
 			b.ClockSpeed = 1.0
 		}
@@ -125,17 +151,20 @@ func (s *Server) createBuildable(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// The real mod only reports recipe/clock_speed for buildables that
-		// are manufacturers (AFGBuildableManufacturer); for everything else
-		// (foundations, splitters, mergers, power poles, ...) any requested
-		// values are silently ignored at spawn and the fields are omitted
-		// from every response. Zeroing them here + `omitempty` on the wire
-		// types reproduces that shape exactly - so a config that sets
-		// recipe/clock_speed on a non-manufacturer class fails CI the same
-		// way it would fail live (provider sees a response that doesn't
-		// echo the plan), instead of passing against a too-lenient mock.
-		b.Recipe = ""
+		// The real mod only reports clock_speed for buildables that can
+		// change potential (manufacturers, extractors, generators); for
+		// everything else (foundations, splitters, mergers, power poles, ...)
+		// any requested value is silently ignored at spawn and the field is
+		// omitted from every response. Zeroing it here + `omitempty` on the
+		// wire types reproduces that shape exactly - so a config that sets
+		// clock_speed on a splitter fails CI the same way it would fail live
+		// (provider sees a response that doesn't echo the plan), instead of
+		// passing against a too-lenient mock.
 		b.ClockSpeed = 0
+	}
+	if !isManufacturerClass(b.Class) {
+		// Same story for recipe, which only manufacturers have.
+		b.Recipe = ""
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,14 +172,31 @@ func (s *Server) createBuildable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "buildable with tf_id "+b.TFID+" already exists")
 		return
 	}
+	// Node binding: an extractor is placed where its node says, and the
+	// node becomes occupied. Checked before the position rule below because
+	// its transform is only known afterwards.
+	placed, node, status, msg := s.resolveExtractorPlacement(b.Class, b.NodeID, b.Placement)
+	if status != 0 {
+		writeErr(w, status, msg)
+		return
+	}
+	if node != nil {
+		if node.Occupied {
+			writeErr(w, http.StatusConflict, "node "+node.ID+" is already occupied by another extractor")
+			return
+		}
+		b.Transform = placed
+		// The response carries the resolved transform; placement was input.
+		b.Placement = nil
+	}
 	// Mirrors the real mod: a lightweight-eligible buildable (foundations and
 	// other passive structures) may not be placed where one of the same class
 	// already sits. Co-located instances are indistinguishable after a
 	// save/reload, since identity there is class + location, so the mod
-	// refuses rather than creating a pair that would strand each other. Only
-	// non-manufacturers are eligible, which is why this is keyed off the same
-	// predicate the recipe/clock rules use.
-	if !isManufacturerClass(b.Class) {
+	// refuses rather than creating a pair that would strand each other. The
+	// real mod only converts (and so only refuses) lightweight-eligible
+	// classes; a pole or splitter on top of another is allowed, if silly.
+	if isLightweightClass(b.Class) {
 		for _, existing := range s.buildables {
 			if existing.Class == b.Class && sameSpot(existing.Transform, b.Transform) {
 				writeErr(w, http.StatusConflict,
@@ -159,6 +205,12 @@ func (s *Server) createBuildable(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if node != nil && canBecomeOccupied(*node) {
+		node.Occupied = true
+		node.OccupantTFID = b.TFID
+	}
+	// An apply replaces each ghost with its real building.
+	delete(s.previews, b.TFID)
 	s.buildables[b.TFID] = b
 	writeJSON(w, http.StatusCreated, b)
 }
@@ -187,10 +239,17 @@ func (s *Server) patchBuildable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no buildable with that tf_id")
 		return
 	}
-	if !isManufacturerClass(b.Class) {
-		// Mirrors the real mod's PatchBuildable: only manufacturers have a
-		// recipe/clock to patch; same message, same 422.
+	if !isClockableClass(b.Class) {
+		// Mirrors the real mod's PatchBuildable: only buildables that can
+		// change potential have anything to patch; same message, same 422.
 		writeErr(w, http.StatusUnprocessableEntity, "this buildable has no recipe/clock_speed to patch")
+		return
+	}
+	if p.Recipe != nil && !isManufacturerClass(b.Class) {
+		// A miner or generator can be clocked but has no recipe. The
+		// provider's extractor resource never sends one; this guards the
+		// contract for any other client.
+		writeErr(w, http.StatusUnprocessableEntity, "this buildable has no recipe to patch")
 		return
 	}
 	if p.Recipe != nil {
@@ -219,11 +278,19 @@ func (s *Server) deleteBuildable(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("tf_id")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.buildables[id]; !ok {
+	b, ok := s.buildables[id]
+	if !ok {
 		writeErr(w, http.StatusNotFound, "no buildable with that tf_id")
 		return
 	}
 	delete(s.buildables, id)
+	// Dismantling an extractor frees its node, as the game does.
+	if b.NodeID != "" {
+		if n, ok := s.nodes[b.NodeID]; ok && n.OccupantTFID == id {
+			n.Occupied = false
+			n.OccupantTFID = ""
+		}
+	}
 	// Matches the real mod: dismantling a connected buildable is allowed
 	// (the belt/wire just dangles), it's not blocked with a 409 - but any
 	// connection that referenced this id would otherwise keep resolving to
@@ -515,6 +582,7 @@ func (s *Server) listWorldBuildables(w http.ResponseWriter, r *http.Request) {
 			TFID:        b.TFID,
 			Class:       b.Class,
 			Transform:   b.Transform,
+			NodeID:      b.NodeID,
 			Lightweight: isLightweightClass(b.Class),
 			Recipe:      b.Recipe,
 			ClockSpeed:  b.ClockSpeed,

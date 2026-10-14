@@ -5,6 +5,7 @@ package provider
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -29,6 +30,7 @@ type satisfactoryProvider struct {
 type providerModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
 	Token    types.String `tfsdk:"token"`
+	Preview  types.Bool   `tfsdk:"preview"`
 }
 
 func (p *satisfactoryProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -50,6 +52,15 @@ func (p *satisfactoryProvider) Schema(_ context.Context, _ provider.SchemaReques
 				Description: "Bearer token, required only when the mod is configured with one " +
 					"(set SATISFACTORY_TOKEN in the game's environment for non-loopback " +
 					"deployments). Defaults to the SATISFACTORY_TOKEN env var.",
+			},
+			"preview": schema.BoolAttribute{
+				Optional: true,
+				Description: "Show every placement a plan would create as a hologram in the running game, " +
+					"and report the game's placement verdict (clearance, overlap, node snapping) as plan " +
+					"warnings. Holograms are transient: nothing is built or saved, and each one is removed " +
+					"when its building is applied or after a short timeout. Off by default because plan is " +
+					"meant to have no side effects. Defaults to the SATISFACTORY_PREVIEW env var " +
+					"(\"1\"/\"true\").",
 			},
 		},
 	}
@@ -75,6 +86,14 @@ func (p *satisfactoryProvider) Configure(ctx context.Context, req provider.Confi
 	}
 
 	c := client.New(endpoint, token)
+	preview := cfg.Preview.ValueBool()
+	if cfg.Preview.IsNull() {
+		switch strings.ToLower(os.Getenv("SATISFACTORY_PREVIEW")) {
+		case "1", "true", "yes", "on":
+			preview = true
+		}
+	}
+	c.SetPreview(preview)
 	resp.ResourceData = c
 	resp.DataSourceData = c
 }
@@ -83,6 +102,7 @@ func (p *satisfactoryProvider) Resources(_ context.Context) []func() resource.Re
 	return []func() resource.Resource{
 		newFoundationResource,
 		newBuildingResource,
+		newExtractorResource,
 		newBeltResource,
 		newPowerLineResource,
 		newPipelineResource,
@@ -93,5 +113,6 @@ func (p *satisfactoryProvider) Resources(_ context.Context) []func() resource.Re
 func (p *satisfactoryProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		newBuildableClassDataSource,
+		newResourceNodesDataSource,
 	}
 }

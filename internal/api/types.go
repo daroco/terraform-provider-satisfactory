@@ -11,13 +11,91 @@ type Transform struct {
 	Yaw float64 `json:"yaw"`
 }
 
-// Buildable is a machine or foundation placed in the world.
+// Buildable is a machine, foundation or extractor placed in the world.
+//
+// Coordinate-placed classes carry Transform on input. Extractor classes
+// (miners, water extractors, ...) carry NodeID instead - they are placed on a
+// world feature, not at a point - and get their Transform back from the
+// response. Placement optionally tunes where on the feature they go.
 type Buildable struct {
-	TFID       string    `json:"tf_id"`
-	Class      string    `json:"class"`
-	Transform  Transform `json:"transform"`
-	Recipe     string    `json:"recipe,omitempty"`
-	ClockSpeed float64   `json:"clock_speed,omitempty"`
+	TFID       string     `json:"tf_id"`
+	Class      string     `json:"class"`
+	Transform  Transform  `json:"transform"`
+	NodeID     string     `json:"node_id,omitempty"`
+	Placement  *Placement `json:"placement,omitempty"`
+	Recipe     string     `json:"recipe,omitempty"`
+	ClockSpeed float64    `json:"clock_speed,omitempty"`
+}
+
+// Placement is where on a world feature an extractor goes. Pointers because
+// "not set" (use the feature's own placement) differs from 0.
+type Placement struct {
+	X   *float64 `json:"x,omitempty"`
+	Y   *float64 `json:"y,omitempty"`
+	Yaw *float64 `json:"yaw,omitempty"`
+}
+
+// ResourceNode is one entry from GET /world/resource-nodes: a resource node,
+// geyser or water volume an extractor can bind to.
+type ResourceNode struct {
+	// ID is the feature's stable actor path - what Buildable.NodeID takes.
+	ID       string `json:"id"`
+	Resource string `json:"resource"`
+	// Purity is impure/normal/pure for resource nodes and "" for water.
+	Purity string `json:"purity"`
+	// Form is solid/liquid/gas/heat: what decides which extractor fits.
+	Form string `json:"form"`
+	// Type is node/geyser/water/fracking/fracking_satellite. Not closed.
+	Type     string `json:"type"`
+	Occupied bool   `json:"occupied"`
+	// OccupantTFID is set when the extractor on this feature is one the mod
+	// tracks, so a config can keep selecting the nodes it already owns.
+	OccupantTFID string  `json:"occupant_tf_id,omitempty"`
+	X            float64 `json:"x"`
+	Y            float64 `json:"y"`
+	Z            float64 `json:"z"`
+	Yaw          float64 `json:"yaw"`
+	// BoundsMin/Max are set for water volumes only: the box the volume
+	// occupies, so a config can spread extractors across it.
+	BoundsMin *Vec3 `json:"bounds_min,omitempty"`
+	BoundsMax *Vec3 `json:"bounds_max,omitempty"`
+}
+
+// ResourceNodeQuery is the filter for GET /world/resource-nodes. Center and
+// Radius are pointers because "unset" is meaningful: without a centre the
+// result is sorted by id, and a radius needs a centre.
+type ResourceNodeQuery struct {
+	Resource        string
+	Purity          string
+	Center          *Vec3
+	Radius          *float64
+	IncludeOccupied bool
+}
+
+// Preview is the body of POST /preview: a would-be buildable to show as an
+// in-game hologram, with the same placement fields as Buildable.
+type Preview struct {
+	TFID       string     `json:"tf_id"`
+	Class      string     `json:"class"`
+	Transform  *Transform `json:"transform,omitempty"`
+	NodeID     string     `json:"node_id,omitempty"`
+	Placement  *Placement `json:"placement,omitempty"`
+	TTLSeconds int64      `json:"ttl_seconds,omitempty"`
+}
+
+// PreviewResult is what the game's hologram said about a Preview. Valid is a
+// pointer because nil means the mod could not run the validation at all,
+// which is distinct from invalid.
+type PreviewResult struct {
+	TFID          string   `json:"tf_id"`
+	Class         string   `json:"class"`
+	Valid         *bool    `json:"valid"`
+	Disqualifiers []string `json:"disqualifiers"`
+	X             float64  `json:"x"`
+	Y             float64  `json:"y"`
+	Z             float64  `json:"z"`
+	Yaw           float64  `json:"yaw"`
+	ExpiresIn     int64    `json:"expires_in,omitempty"`
 }
 
 // BuildablePatch carries the in-place-mutable fields of a Buildable.
@@ -96,13 +174,15 @@ type BuildableClass struct {
 type WorldBuildable struct {
 	// Index is the only handle an untracked buildable has. It is valid within
 	// one response and nowhere else.
-	Index       int64     `json:"index"`
-	TFID        string    `json:"tf_id,omitempty"`
-	Class       string    `json:"class"`
-	Transform   Transform `json:"transform"`
-	Lightweight bool      `json:"lightweight"`
-	Recipe      string    `json:"recipe,omitempty"`
-	ClockSpeed  float64   `json:"clock_speed,omitempty"`
+	Index     int64     `json:"index"`
+	TFID      string    `json:"tf_id,omitempty"`
+	Class     string    `json:"class"`
+	Transform Transform `json:"transform"`
+	// NodeID is set for extractors: the feature they are bound to.
+	NodeID      string  `json:"node_id,omitempty"`
+	Lightweight bool    `json:"lightweight"`
+	Recipe      string  `json:"recipe,omitempty"`
+	ClockSpeed  float64 `json:"clock_speed,omitempty"`
 	// Connects is set for belts and wires whose two ends are both inside the
 	// queried radius. A partially known connection is omitted rather than
 	// guessed: a wrong connector index yields config that applies cleanly and

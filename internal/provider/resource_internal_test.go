@@ -314,3 +314,58 @@ func TestBuildingCreate_DefaultsUnsetClockSpeedTo1(t *testing.T) {
 		t.Errorf("state clock_speed = %v, want 0 (verbatim from the API response, not re-defaulted)", got)
 	}
 }
+
+// TestExtractorSchema_ReplaceVsInPlace: everything that identifies where an
+// extractor stands replaces it; clock_speed patches; z is purely computed.
+func TestExtractorSchema_ReplaceVsInPlace(t *testing.T) {
+	var resp resource.SchemaResponse
+	(&extractorResource{}).Schema(context.Background(), resource.SchemaRequest{}, &resp)
+	attrs := resp.Schema.Attributes
+
+	for _, name := range []string{"class", "node_id"} {
+		a, ok := attrs[name].(fwschema.StringAttribute)
+		if !ok || !hasStringRequiresReplace(a.PlanModifiers) {
+			t.Errorf("%s should RequiresReplace", name)
+		}
+	}
+	for _, name := range []string{"x", "y", "yaw"} {
+		a, ok := attrs[name].(fwschema.Float64Attribute)
+		if !ok || !hasFloat64RequiresReplace(a.PlanModifiers) {
+			t.Errorf("%s should RequiresReplace", name)
+		}
+		if a.Default != nil {
+			t.Errorf("%s must have no static Default: the game decides it when the config does not", name)
+		}
+	}
+	z, ok := attrs["z"].(fwschema.Float64Attribute)
+	if !ok || z.Optional || !z.Computed || hasFloat64RequiresReplace(z.PlanModifiers) {
+		t.Error("z should be computed-only: the game places the extractor on the node")
+	}
+	clock, ok := attrs["clock_speed"].(fwschema.Float64Attribute)
+	if !ok || hasFloat64RequiresReplace(clock.PlanModifiers) || clock.Default != nil {
+		t.Error("clock_speed should update in place with no static Default")
+	}
+}
+
+// TestPreviewKey_StableAndDistinct: the plan-time hologram key must be the
+// same for the same placement (so Create can clear what ModifyPlan showed)
+// and different for a different one (so ghosts do not replace each other).
+func TestPreviewKey_StableAndDistinct(t *testing.T) {
+	t1 := api.Transform{X: 1, Y: 2, Z: 3, Yaw: 90}
+	a := previewKey(api.Preview{Class: "Build_SmelterMk1_C", Transform: &t1})
+	b := previewKey(api.Preview{Class: "Build_SmelterMk1_C", Transform: &t1})
+	if a != b {
+		t.Errorf("same placement gave different keys: %s vs %s", a, b)
+	}
+	t2 := t1
+	t2.X = 2
+	if c := previewKey(api.Preview{Class: "Build_SmelterMk1_C", Transform: &t2}); c == a {
+		t.Error("a moved placement should get a different key")
+	}
+	yaw := 45.0
+	d := previewKey(api.Preview{Class: "Build_MinerMk1_C", NodeID: "n-1", Placement: &api.Placement{Yaw: &yaw}})
+	e := previewKey(api.Preview{Class: "Build_MinerMk1_C", NodeID: "n-1"})
+	if d == e {
+		t.Error("a placement override should change the key")
+	}
+}
