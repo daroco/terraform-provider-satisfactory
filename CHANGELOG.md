@@ -20,6 +20,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `modules/manifold-line` and `modules/pole-chain`, and `examples/tier4-factory`:
   a complete factory for every automatable part through Tier 4, coal-powered.
 - The exporter emits `satisfactory_extractor` for node-bound buildables.
+- `satisfactory_resource_nodes` reports positions and water bounds in whole
+  centimetres. The game reports arbitrary doubles, and any config arithmetic
+  on one of those failed the plan with "planned value does not match config
+  value".
+- Contract, mock and client for session control and inventory grants:
+  `POST /session/save`, `POST /session/quit` (save, then exit the game) and
+  `POST /players/{name}/inventory`. The provider itself does not call them;
+  they let tooling drive a save/quit/relaunch/reload loop and put items in a
+  player's hands. Plan-time holograms now stand for the API maximum of ten
+  minutes, and a hologram whose only complaint is "no floor" no longer warns
+  (the floor under it is usually part of the same plan).
 
 - Release tooling for the Terraform Registry: GoReleaser config, registry
   manifest (protocol 6), and a tag-triggered release workflow.

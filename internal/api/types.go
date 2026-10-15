@@ -229,3 +229,36 @@ type ClassInfo struct {
 	// it can otherwise place - Terraform can put it down but not configure it.
 	SettingsNotModelled string `json:"settings_not_modelled,omitempty"`
 }
+
+// SessionSave is the body of POST /session/save and the save part of
+// POST /session/quit. An empty Name means "<session name>_terraform".
+type SessionSave struct {
+	Name string `json:"name,omitempty"`
+}
+
+// SessionSaveResult answers a save or quit: the save name written, empty
+// when a quit skipped saving.
+type SessionSaveResult struct {
+	Saved string `json:"saved"`
+}
+
+// SessionQuit is the body of POST /session/quit. Save defaults to true.
+type SessionQuit struct {
+	Save *bool  `json:"save,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+// InventoryGrant is the body of POST /players/{name}/inventory: put Count of
+// the item descriptor class Item (Desc_Coal_C) into a player's inventory.
+type InventoryGrant struct {
+	Item  string `json:"item"`
+	Count int    `json:"count,omitempty"`
+}
+
+// InventoryGrantResult reports how many items actually went in.
+type InventoryGrantResult struct {
+	Player    string `json:"player"`
+	Item      string `json:"item"`
+	Requested int    `json:"requested"`
+	Added     int    `json:"added"`
+}

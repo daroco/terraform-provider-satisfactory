@@ -171,6 +171,30 @@ func (c *Client) ClearPreviews(ctx context.Context) (int, error) {
 	return out.Removed, err
 }
 
+// SaveSession writes a save through the game's save system and returns once
+// it is on disk. An empty name means "<session name>_terraform".
+func (c *Client) SaveSession(ctx context.Context, name string) (api.SessionSaveResult, error) {
+	var out api.SessionSaveResult
+	err := c.do(ctx, http.MethodPost, "/session/save", api.SessionSave{Name: name}, &out)
+	return out, err
+}
+
+// QuitSession saves (unless save is false) and asks the game to exit. The
+// call returns once the save is written; the process exits right after.
+func (c *Client) QuitSession(ctx context.Context, save bool, name string) (api.SessionSaveResult, error) {
+	var out api.SessionSaveResult
+	err := c.do(ctx, http.MethodPost, "/session/quit", api.SessionQuit{Save: &save, Name: name}, &out)
+	return out, err
+}
+
+// GiveItems puts count of an item descriptor class (Desc_Coal_C) into the
+// named player's inventory and reports how many fit.
+func (c *Client) GiveItems(ctx context.Context, player, item string, count int) (api.InventoryGrantResult, error) {
+	var out api.InventoryGrantResult
+	err := c.do(ctx, http.MethodPost, "/players/"+url.PathEscape(player)+"/inventory", api.InventoryGrant{Item: item, Count: count}, &out)
+	return out, err
+}
+
 // ListPlayers reports connected players that have spawned in.
 func (c *Client) ListPlayers(ctx context.Context) ([]api.Player, error) {
 	var out []api.Player

@@ -32,6 +32,12 @@ type Server struct {
 	untracked []api.WorldBuildable
 	players   []api.Player
 
+	// Session control (see session.go): the save names asked for, in
+	// order, and whether a quit was requested. The mock neither writes files
+	// nor exits.
+	saved []string
+	quit  bool
+
 	// World features an extractor can bind to (see nodes.go). Seeded with a
 	// fixed geography so configs that select nodes apply in CI.
 	nodes map[string]*api.ResourceNode
@@ -81,6 +87,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/world/buildables", s.auth(s.listWorldBuildables))
 	mux.HandleFunc("GET /api/v1/world/resource-nodes", s.auth(s.listResourceNodes))
 	mux.HandleFunc("GET /api/v1/players", s.auth(s.listPlayers))
+	mux.HandleFunc("POST /api/v1/players/{name}/inventory", s.auth(s.grantInventory))
+	mux.HandleFunc("POST /api/v1/session/save", s.auth(s.saveSession))
+	mux.HandleFunc("POST /api/v1/session/quit", s.auth(s.quitSession))
 
 	mux.HandleFunc("GET /api/v1/preview", s.auth(s.listPreviews))
 	mux.HandleFunc("POST /api/v1/preview", s.auth(s.createPreview))

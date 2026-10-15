@@ -30,6 +30,16 @@ import (
 // hologram that has not completed its first placement pass yet.
 const initializingDisqualifier = "FGCDInitializing"
 
+// floorDisqualifier is the game's verdict for a building with nothing under
+// it. A plan previews its machines before the foundations under them exist
+// (those are ghosts too), so on its own it says nothing about the config.
+const floorDisqualifier = "FGCDInvalidFloor"
+
+// previewTTLSeconds is how long a plan's ghosts stand: the API maximum, so
+// there is time to fly over a large plan. Apply removes each ghost as it
+// builds the real thing.
+const previewTTLSeconds = 600
+
 // previewKey identifies a hologram for a resource that may not have a tf_id
 // yet (a create has no id until apply). It is derived from what is being
 // placed, so the same plan re-run replaces its ghosts instead of stacking
@@ -60,6 +70,7 @@ func previewKey(p api.Preview) string {
 // dislikes. Create recomputes the same key to clear the ghost.
 func previewPlacement(ctx context.Context, c *client.Client, what string, p api.Preview, diags *diag.Diagnostics) {
 	p.TFID = previewKey(p)
+	p.TTLSeconds = previewTTLSeconds
 	res, err := c.PreviewBuildable(ctx, p)
 	if err != nil {
 		diags.AddWarning(
@@ -88,7 +99,8 @@ func previewPlacement(ctx context.Context, c *client.Client, what string, p api.
 		)
 		return
 	}
-	if !*res.Valid {
+	hard := slices.DeleteFunc(slices.Clone(res.Disqualifiers), func(d string) bool { return d == floorDisqualifier })
+	if !*res.Valid && len(hard) > 0 {
 		diags.AddWarning(
 			"Placement of "+what+" would be refused by the build gun",
 			fmt.Sprintf("The game's hologram at (%g, %g, %g) reports: %s. Apply will still place it - the API does not "+

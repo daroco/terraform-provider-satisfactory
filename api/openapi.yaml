@@ -160,6 +160,106 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Player" }
+  /session/save:
+    post:
+      summary: Save the running session
+      description: >
+        Writes a save file through the game's own save system and answers
+        when the write has finished, so a caller can quit or reload right
+        after. With no name, the save is called "<session name>_terraform".
+        Only one save can be in flight at a time.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SessionSave" }
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionSaveResult" }
+        "409":
+          description: A save is already in progress.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: The game reported the save failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /session/quit:
+    post:
+      summary: Save (by default) and exit the game process
+      description: >
+        Saves exactly like POST /session/save unless `save` is false, answers,
+        and then asks the engine to exit. With the mod's auto-load (launch the
+        game with `-STFLoad=<save name>` or the environment variable
+        `SATISFACTORY_TERRAFORM_LOAD`), this gives tooling a hands-free
+        save, quit, relaunch, reload loop.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SessionQuit" }
+      responses:
+        "202":
+          description: Saved (if requested); the process exits right after this answer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionSaveResult" }
+        "409":
+          description: A save is already in progress.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: The save failed; the game keeps running.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /players/{name}/inventory:
+    post:
+      summary: Put items into a player's inventory
+      description: >
+        Adds a number of an item (an item descriptor class such as
+        Desc_Coal_C) to the named player's inventory, split into full stacks.
+        Nothing is checked against unlocks or cost - this API is creative
+        mode by design. Answers how many were added, which is fewer than
+        asked when the inventory fills up.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: The player name GET /players reports.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InventoryGrant" }
+      responses:
+        "200":
+          description: Items added.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InventoryGrantResult" }
+        "404":
+          description: No such player.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The player has no character in the world, or the inventory is full.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Unknown item class or invalid count.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /classes:
     get:
       summary: Every buildable class the game ships, classified by how it must be placed
@@ -740,6 +840,51 @@ components:
             Connector index on that buildable, in the same ordering
             POST /connections accepts - so an exported connection can be
             re-created against the same port.
+    SessionSave:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Save file name without extension. Default "<session name>_terraform".
+    SessionSaveResult:
+      type: object
+      required: [saved]
+      properties:
+        saved:
+          type: string
+          description: The save name written; empty when the quit skipped saving.
+    SessionQuit:
+      type: object
+      properties:
+        save:
+          type: boolean
+          default: true
+          description: Save before exiting.
+        name:
+          type: string
+          description: Save file name without extension. Default "<session name>_terraform".
+    InventoryGrant:
+      type: object
+      required: [item]
+      properties:
+        item:
+          type: string
+          description: Item descriptor class, e.g. Desc_Coal_C.
+        count:
+          type: integer
+          default: 1
+          minimum: 1
+          maximum: 100000
+    InventoryGrantResult:
+      type: object
+      required: [player, item, requested, added]
+      properties:
+        player: { type: string }
+        item: { type: string }
+        requested: { type: integer }
+        added:
+          type: integer
+          description: How many actually went in; less than requested when the inventory is full.
     Player:
       type: object
       required: [location]
