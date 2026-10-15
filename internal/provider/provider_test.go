@@ -730,6 +730,57 @@ data "satisfactory_resource_nodes" "bad" {
 	})
 }
 
+// TestAccNodeCoordinateArithmeticPlans guards the whole-centimetre rounding
+// in the data source. The game reports positions as arbitrary doubles; a
+// plan whose config does arithmetic on one of those ("node.x - 600") failed
+// with "planned value does not match config value" because Terraform
+// compares a double-precision planned number with its 512-bit config twin
+// by decimal text (seen live). Rounded to whole centimetres, the text is the
+// same at either precision and the plan goes through.
+func TestAccNodeCoordinateArithmeticPlans(t *testing.T) {
+	s := mockserver.New("")
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	t.Setenv("SATISFACTORY_ENDPOINT", srv.URL)
+	s.SeedResourceNodes([]api.ResourceNode{{
+		ID: "Persistent_Level:PersistentLevel.FGWaterVolume78", Resource: "Desc_Water_C", Form: "liquid", Type: "water",
+		X: -75539.999099824796, Y: 231719.99962137232, Z: -2630,
+		BoundsMin: &api.Vec3{X: -81773.951078381157, Y: 226153.18582960669, Z: -3630},
+		BoundsMax: &api.Vec3{X: -69305.99, Y: 237286.81, Z: -2630},
+	}})
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+data "satisfactory_resource_nodes" "water" {
+  resource = "Desc_Water_C"
+}
+
+locals {
+  w = data.satisfactory_resource_nodes.water.nodes[0]
+}
+
+resource "satisfactory_building" "pole" {
+  class = "Build_PowerPoleMk1_C"
+  x     = local.w.x - 600
+  y     = local.w.bounds_min.y - 3000
+  z     = local.w.z + 50
+  yaw   = 0
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.water", "nodes.0.x", "-75540"),
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.water", "nodes.0.y", "231720"),
+					resource.TestCheckResourceAttr("data.satisfactory_resource_nodes.water", "nodes.0.bounds_min.y", "226153"),
+				),
+			},
+		},
+	})
+}
+
 // TestAccPreviewOnPlan turns previewing on and checks the hologram flow:
 // a plan leaves ghosts standing, apply replaces them, and a placement the
 // game would refuse surfaces as a warning rather than failing the plan.

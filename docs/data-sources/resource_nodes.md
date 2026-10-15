@@ -61,10 +61,10 @@ Read-Only:
 - `purity` (String) impure, normal or pure; empty for water.
 - `resource` (String) Resource descriptor class, e.g. Desc_OreIron_C.
 - `type` (String) node, geyser, water, fracking or fracking_satellite.
-- `x` (Number)
-- `y` (Number)
+- `x` (Number) Position in whole centimetres.
+- `y` (Number) Position in whole centimetres.
 - `yaw` (Number) Default rotation an extractor gets here, in degrees.
-- `z` (Number) Position in centimetres. For water, the volume's centre at surface height.
+- `z` (Number) Position in whole centimetres. For water, the volume's centre at surface height.
 
 <a id="nestedatt--nodes--bounds_max"></a>
 ### Nested Schema for `nodes.bounds_max`

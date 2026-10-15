@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -98,9 +99,9 @@ func (d *resourceNodesDataSource) Schema(_ context.Context, _ datasource.SchemaR
 						"type":           schema.StringAttribute{Computed: true, Description: "node, geyser, water, fracking or fracking_satellite."},
 						"occupied":       schema.BoolAttribute{Computed: true, Description: "True when an extractor already sits on it."},
 						"occupant_tf_id": schema.StringAttribute{Computed: true, Description: "The Terraform-managed extractor on it, if any; empty otherwise."},
-						"x":              schema.Float64Attribute{Computed: true},
-						"y":              schema.Float64Attribute{Computed: true},
-						"z":              schema.Float64Attribute{Computed: true, Description: "Position in centimetres. For water, the volume's centre at surface height."},
+						"x":              schema.Float64Attribute{Computed: true, Description: "Position in whole centimetres."},
+						"y":              schema.Float64Attribute{Computed: true, Description: "Position in whole centimetres."},
+						"z":              schema.Float64Attribute{Computed: true, Description: "Position in whole centimetres. For water, the volume's centre at surface height."},
 						"yaw":            schema.Float64Attribute{Computed: true, Description: "Default rotation an extractor gets here, in degrees."},
 						"bounds_min":     vec3DataAttr("Water volumes only: lowest corner of the volume's box."),
 						"bounds_max":     vec3DataAttr("Water volumes only: highest corner of the volume's box."),
@@ -185,18 +186,31 @@ func (d *resourceNodesDataSource) Read(ctx context.Context, req datasource.ReadR
 			Type:         types.StringValue(n.Type),
 			Occupied:     types.BoolValue(n.Occupied),
 			OccupantTFID: types.StringValue(n.OccupantTFID),
-			X:            types.Float64Value(n.X),
-			Y:            types.Float64Value(n.Y),
-			Z:            types.Float64Value(n.Z),
+			X:            types.Float64Value(wholeCm(n.X)),
+			Y:            types.Float64Value(wholeCm(n.Y)),
+			Z:            types.Float64Value(wholeCm(n.Z)),
 			Yaw:          types.Float64Value(n.Yaw),
 		}
 		if n.BoundsMin != nil {
-			m.BoundsMin = &vec3Model{X: types.Float64Value(n.BoundsMin.X), Y: types.Float64Value(n.BoundsMin.Y), Z: types.Float64Value(n.BoundsMin.Z)}
+			m.BoundsMin = &vec3Model{X: types.Float64Value(wholeCm(n.BoundsMin.X)), Y: types.Float64Value(wholeCm(n.BoundsMin.Y)), Z: types.Float64Value(wholeCm(n.BoundsMin.Z))}
 		}
 		if n.BoundsMax != nil {
-			m.BoundsMax = &vec3Model{X: types.Float64Value(n.BoundsMax.X), Y: types.Float64Value(n.BoundsMax.Y), Z: types.Float64Value(n.BoundsMax.Z)}
+			m.BoundsMax = &vec3Model{X: types.Float64Value(wholeCm(n.BoundsMax.X)), Y: types.Float64Value(wholeCm(n.BoundsMax.Y)), Z: types.Float64Value(wholeCm(n.BoundsMax.Z))}
 		}
 		cfg.Nodes = append(cfg.Nodes, m)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, cfg)...)
 }
+
+// wholeCm rounds a world coordinate to a whole centimetre.
+//
+// Positions come out of the game as arbitrary doubles (-75539.999099824796).
+// Terraform holds a number computed in config, such as `node.x - 600`, at
+// 512-bit precision but receives the provider's planned copy of it as a
+// double, and it compares the two by their shortest decimal text, which
+// differs between the two precisions for any double that is not a short
+// decimal. Every such plan fails with "planned value does not match config
+// value" (seen live on examples/tier4-factory). Integers print the same at
+// any precision, and nothing in the game is placed to a fraction of a
+// centimetre, so the data source only ever hands out whole centimetres.
+func wholeCm(v float64) float64 { return math.Round(v) }
